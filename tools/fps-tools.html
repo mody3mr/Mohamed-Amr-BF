@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بوابة أدوات FPs Automation</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- مكتبات معالجة الإكسيل -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+        body { font-family: 'Tajawal', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-6 relative">
+
+    <div class="max-w-2xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 z-10">
+        
+        <!-- الهيدر الموحد -->
+        <div class="bg-indigo-600 p-8 text-center relative overflow-hidden">
+            <div class="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+            <div class="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-black/10 rounded-full blur-2xl"></div>
+            <i class="fa-solid fa-layer-group text-5xl text-white mb-4 shadow-sm"></i>
+            <h1 class="text-3xl font-bold text-white tracking-wide">بوابة أدوات FPs</h1>
+            <p class="text-indigo-200 mt-2 text-sm">أدوات الأتمتة المتقدمة لمعالجة وتنسيق الشيتات</p>
+        </div>
+
+        <!-- تابات التنقل (Tabs) -->
+        <div class="flex border-b border-slate-200 bg-slate-50">
+            <button id="btnTabPivot" onclick="switchTab('Pivot')" class="flex-1 py-4 text-center font-bold text-indigo-700 bg-white border-b-4 border-indigo-600 transition-all">
+                <i class="fa-solid fa-table-list ml-2"></i> أداة الـ Pivot
+            </button>
+            <button id="btnTabNotes" onclick="switchTab('Notes')" class="flex-1 py-4 text-center font-bold text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-all border-b-4 border-transparent">
+                <i class="fa-solid fa-pen-to-square ml-2"></i> إضافة الملاحظات
+            </button>
+            <button id="btnTabOut" onclick="switchTab('Out')" class="flex-1 py-4 text-center font-bold text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-all border-b-4 border-transparent">
+                <i class="fa-solid fa-triangle-exclamation ml-2"></i> اوت بوت
+            </button>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- 1. أداة الـ Pivot (الأولى) -->
+        <!-- ============================================== -->
+        <div id="toolPivot" class="p-8 block">
+            <div id="dropZoneContainerPivot" class="border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/50 p-12 text-center transition-all hover:bg-indigo-50 hover:border-indigo-400 cursor-pointer flex flex-col items-center justify-center group">
+                <div id="dropZoneContentPivot">
+                    <div class="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-500 mb-4 group-hover:scale-110 transition-transform mx-auto">
+                        <i class="fa-solid fa-cloud-arrow-up text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-700">اضغط هنا لاختيار الملف</h3>
+                    <p class="text-sm text-slate-500 mt-1">أو قم بسحب وإفلات شيت أودو خام هنا</p>
+                </div>
+                <div id="loadingStatePivot" class="hidden text-indigo-500">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-3"></i>
+                    <p class="font-bold">جاري الفحص والتنسيق الذكي...</p>
+                </div>
+            </div>
+
+            <input type="file" id="fileInputPivot" accept=".xlsx, .xls, .csv" class="hidden">
+
+            <div id="errorStatePivot" class="hidden mt-6 text-center animate-fade-in bg-rose-50 border border-rose-200 p-6 rounded-2xl">
+                <i class="fa-solid fa-triangle-exclamation text-4xl text-rose-500 mb-3"></i>
+                <h4 class="text-lg font-bold text-slate-800">يوجد مشكلة في الملف المرفوع!</h4>
+                <p id="errorMsgPivot" class="text-sm text-rose-600 mt-2 font-medium"></p>
+                <button onclick="resetTool('Pivot')" class="mt-4 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 px-6 py-2 rounded-lg font-bold transition-all text-sm">
+                    حاول مرة أخرى
+                </button>
+            </div>
+
+            <div id="successStatePivot" class="hidden mt-6 text-center animate-fade-in">
+                <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-3">
+                    <i class="fa-solid fa-check"></i>
+                </div>
+                <h4 class="text-lg font-bold text-slate-800">تم تجهيز وتنسيق شيت الـ Pivot!</h4>
+                <p id="successDetailsPivot" class="text-xs text-emerald-600 mt-1 font-medium bg-emerald-50 inline-block px-3 py-1 rounded-full border border-emerald-100"></p>
+                <button onclick="downloadResult('Pivot')" class="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 mx-auto">
+                    <i class="fa-solid fa-download"></i> تحميل الملف النهائي
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- 2. أداة تعبئة الملاحظات (الجديدة) -->
+        <!-- ============================================== -->
+        <div id="toolNotes" class="p-8 hidden">
+            
+            <!-- مربع إدخال النوتة -->
+            <div class="mb-6 bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100">
+                <label class="block text-sm font-bold text-indigo-900 mb-2">النوتة (التي سيتم إضافتها):</label>
+                <div class="relative">
+                    <i class="fa-solid fa-keyboard absolute right-4 top-1/2 -translate-y-1/2 text-indigo-400"></i>
+                    <input type="text" id="noteInput" placeholder="مثال: Mohamed Amr Coffee" class="w-full border-2 border-indigo-200 rounded-xl pr-12 pl-4 py-3 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-bold text-slate-800 shadow-sm">
+                </div>
+            </div>
+
+            <div id="dropZoneContainerNotes" class="border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/50 p-8 text-center transition-all hover:bg-indigo-50 hover:border-indigo-400 cursor-pointer flex flex-col items-center justify-center group">
+                <div id="dropZoneContentNotes">
+                    <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-500 mb-3 group-hover:scale-110 transition-transform mx-auto">
+                        <i class="fa-solid fa-file-signature text-2xl"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-700">اضغط هنا لرفع الشيت المراد تعديله</h3>
+                </div>
+                <div id="loadingStateNotes" class="hidden text-indigo-500">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-3"></i>
+                    <p class="font-bold">جاري كتابة الملاحظات وتنسيق الشيت...</p>
+                </div>
+            </div>
+
+            <input type="file" id="fileInputNotes" accept=".xlsx, .xls, .csv" class="hidden">
+
+            <div id="errorStateNotes" class="hidden mt-6 text-center animate-fade-in bg-rose-50 border border-rose-200 p-6 rounded-2xl">
+                <i class="fa-solid fa-triangle-exclamation text-4xl text-rose-500 mb-3"></i>
+                <h4 class="text-lg font-bold text-slate-800">يوجد مشكلة في الملف!</h4>
+                <p id="errorMsgNotes" class="text-sm text-rose-600 mt-2 font-medium"></p>
+                <button onclick="resetTool('Notes')" class="mt-4 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 px-6 py-2 rounded-lg font-bold transition-all text-sm">
+                    حاول مرة أخرى
+                </button>
+            </div>
+
+            <div id="successStateNotes" class="hidden mt-6 text-center animate-fade-in">
+                <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-3">
+                    <i class="fa-solid fa-check-double"></i>
+                </div>
+                <h4 class="text-lg font-bold text-slate-800">تم تجهيز الشيت بنجاح!</h4>
+                <p id="successDetailsNotes" class="text-xs text-emerald-600 mt-1 font-medium bg-emerald-50 inline-block px-3 py-1 rounded-full border border-emerald-100"></p>
+                <button onclick="downloadResult('Notes')" class="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 mx-auto">
+                    <i class="fa-solid fa-download"></i> تحميل شيت الملاحظات
+                </button>
+            </div>
+        </div>
+
+
+        <!-- ============================================== -->
+        <!-- 3. أداة الاوت (اوت من المندوب + اوت من المصنع) -->
+        <!-- ============================================== -->
+        <div id="toolOut" class="p-8 hidden">
+
+            <div class="mb-6 bg-amber-50 p-5 rounded-2xl border border-amber-100 text-sm text-slate-700 leading-7">
+                <p class="font-bold text-amber-900 mb-1">الأداة بتعمل إيه؟</p>
+                <p><i class="fa-solid fa-user-clock ml-1 text-amber-500"></i> بتقارن <b>Stock Moves/Demand</b> بـ <b>Stock Moves/Quantity</b> وأي فرق بيتحط في صفحة <b>اوت من المندوب</b> (السطر كامل).</p>
+                <p><i class="fa-solid fa-industry ml-1 text-rose-500"></i> أي سطر الـ Status بتاعه <b>Cancel</b> بيتحط في صفحة <b>اوت من المصنع</b>.</p>
+                <p><i class="fa-solid fa-eraser ml-1 text-slate-400"></i> الصفوف الرمادي (عناوين الفروع) بيتم تجاهلها ويكمل على باقي الصفوف.</p>
+            </div>
+
+            <div id="dropZoneContainerOut" class="border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/50 p-10 text-center transition-all hover:bg-indigo-50 hover:border-indigo-400 cursor-pointer flex flex-col items-center justify-center group">
+                <div id="dropZoneContentOut">
+                    <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-500 mb-3 group-hover:scale-110 transition-transform mx-auto">
+                        <i class="fa-solid fa-file-circle-exclamation text-2xl"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-700">اضغط هنا لرفع شيت أودو الخام</h3>
+                    <p class="text-sm text-slate-500 mt-1">أو اسحب وأفلت الشيت هنا</p>
+                </div>
+                <div id="loadingStateOut" class="hidden text-indigo-500">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-3"></i>
+                    <p class="font-bold">جاري فحص الفروقات والأوردرات الملغية...</p>
+                </div>
+            </div>
+
+            <input type="file" id="fileInputOut" accept=".xlsx" class="hidden">
+
+            <div id="errorStateOut" class="hidden mt-6 text-center animate-fade-in bg-rose-50 border border-rose-200 p-6 rounded-2xl">
+                <i class="fa-solid fa-triangle-exclamation text-4xl text-rose-500 mb-3"></i>
+                <h4 class="text-lg font-bold text-slate-800">يوجد مشكلة في الملف!</h4>
+                <p id="errorMsgOut" class="text-sm text-rose-600 mt-2 font-medium"></p>
+                <button onclick="resetTool('Out')" class="mt-4 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 px-6 py-2 rounded-lg font-bold transition-all text-sm">
+                    حاول مرة أخرى
+                </button>
+            </div>
+
+            <div id="successStateOut" class="hidden mt-6 text-center animate-fade-in">
+                <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-3">
+                    <i class="fa-solid fa-check-double"></i>
+                </div>
+                <h4 class="text-lg font-bold text-slate-800">تم فحص الشيت!</h4>
+                <p id="successDetailsOut" class="text-xs text-emerald-600 mt-1 font-medium bg-emerald-50 inline-block px-3 py-1 rounded-full border border-emerald-100 leading-6"></p>
+                <button onclick="downloadResult('Out')" class="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 mx-auto">
+                    <i class="fa-solid fa-download"></i> تحميل شيت الاوت
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- حقوق الملكية المحمية -->
+    <div class="mt-8 text-center z-10 w-full opacity-90 hover:opacity-100 transition-opacity">
+        <a id="_waAuth" href="https://wa.me/201094264206" target="_blank" class="inline-flex items-center justify-center gap-2 text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors duration-300 bg-white/60 px-5 py-2.5 rounded-full border border-slate-200 shadow-sm">
+            <i class="fa-brands fa-whatsapp text-lg text-emerald-500"></i>
+            © 2026 تم الإنشاء بواسطة | محمد عمرو ابراهيم
+        </a>
+    </div>
+
+    <script>
+        // ==========================================
+        // إدارة التابات (Tabs)
+        // ==========================================
+        function switchTab(tab) {
+            const activeCls = "flex-1 py-4 text-center font-bold text-indigo-700 bg-white border-b-4 border-indigo-600 transition-all";
+            const idleCls = "flex-1 py-4 text-center font-bold text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-all border-b-4 border-transparent";
+            ['Pivot', 'Notes', 'Out'].forEach(name => {
+                const btn = document.getElementById('btnTab' + name);
+                const tool = document.getElementById('tool' + name);
+                if (name === tab) {
+                    btn.className = activeCls;
+                    tool.classList.remove('hidden'); tool.classList.add('block');
+                } else {
+                    btn.className = idleCls;
+                    tool.classList.remove('block'); tool.classList.add('hidden');
+                }
+            });
+        }
+
+        // ==========================================
+        // نظام الحماية الآلي لحقوق المطور
+        // ==========================================
+        function _verifyIntegrity() {
+            try {
+                var el = document.getElementById('_waAuth');
+                if(!el) return false;
+                if(!el.href.includes('201094264206')) return false;
+                var txt = el.textContent || el.innerText;
+                if(!txt.includes('محمد') || !txt.includes('عمرو')) return false;
+                return true;
+            } catch(e) { return false; }
+        }
+
+        function triggerAntiTamper() {
+            document.body.innerHTML = `
+            <div class="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center w-full">
+                <i class="fa-solid fa-shield-halved text-7xl text-rose-500 mb-6 drop-shadow-lg"></i>
+                <h1 class="text-4xl font-bold text-white mb-3">تم إيقاف النظام</h1>
+                <p class="text-slate-400 text-lg max-w-md">عفواً، تم اكتشاف تلاعب بحقوق الملكية الفكرية الخاصة بالمطور. يرجى استعادة الحقوق ليعمل النظام مجدداً.</p>
+            </div>`;
+        }
+
+        // متغيرات حفظ الملفات النهائية
+        let finalBlobPivot = null;
+        let finalBlobNotes = null;
+        let finalBlobOut = null;
+
+        // ==========================================
+        // إعداد مناطق السحب والإفلات برمجياً
+        // ==========================================
+        function dispatchProcess(toolName, file) {
+            if (toolName === 'Pivot') processExcelPivot(file);
+            else if (toolName === 'Notes') processExcelNotes(file);
+            else processExcelOut(file);
+        }
+
+        function setupDropZone(toolName) {
+            const dropZone = document.getElementById(`dropZoneContainer${toolName}`);
+            const fileInput = document.getElementById(`fileInput${toolName}`);
+            
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', (e) => { 
+                e.preventDefault(); dropZone.classList.add('border-indigo-500', 'bg-indigo-100'); 
+            });
+            dropZone.addEventListener('dragleave', () => { 
+                dropZone.classList.remove('border-indigo-500', 'bg-indigo-100'); 
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault(); dropZone.classList.remove('border-indigo-500', 'bg-indigo-100');
+                if (e.dataTransfer.files.length > 0) {
+                    dispatchProcess(toolName, e.dataTransfer.files[0]);
+                }
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    dispatchProcess(toolName, e.target.files[0]);
+                }
+            });
+        }
+
+        setupDropZone('Pivot');
+        setupDropZone('Notes');
+        setupDropZone('Out');
+
+        function resetTool(toolName) {
+            document.getElementById(`errorState${toolName}`).classList.add('hidden');
+            document.getElementById(`successState${toolName}`).classList.add('hidden');
+            document.getElementById(`dropZoneContainer${toolName}`).style.display = 'flex';
+            document.getElementById(`dropZoneContent${toolName}`).classList.remove('hidden');
+            document.getElementById(`loadingState${toolName}`).classList.add('hidden');
+            document.getElementById(`fileInput${toolName}`).value = '';
+        }
+
+        function showError(toolName, msg) {
+            document.getElementById(`dropZoneContainer${toolName}`).style.display = 'none';
+            document.getElementById(`successState${toolName}`).classList.add('hidden');
+            document.getElementById(`errorState${toolName}`).classList.remove('hidden');
+            document.getElementById(`errorMsg${toolName}`).innerText = msg;
+        }
+
+        function downloadResult(toolName) {
+            const blobs = { Pivot: finalBlobPivot, Notes: finalBlobNotes, Out: finalBlobOut };
+            const prefixes = { Pivot: 'Pivot_Odoo_Report', Notes: 'Notes_Filled_Report', Out: 'Out_Report' };
+            let blob = blobs[toolName];
+            let prefix = prefixes[toolName];
+            if(blob) {
+                const dateStr = new Date().toISOString().split('T')[0];
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${prefix}_${dateStr}.xlsx`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                setTimeout(() => resetTool(toolName), 2000);
+            }
+        }
+
+        // ==========================================
+        // 1. منطق أداة الـ Pivot (الأولى)
+        // ==========================================
+        function processExcelPivot(file) {
+            if(!_verifyIntegrity()) return triggerAntiTamper();
+            document.getElementById('dropZoneContentPivot').classList.add('hidden');
+            document.getElementById('loadingStatePivot').classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const rawData = XLSX.utils.sheet_to_json(worksheet, {defval: null});
+
+                    if(rawData.length === 0) return showError('Pivot', "الملف فارغ تماماً.");
+
+                    const headers = Object.keys(rawData[0] || {});
+                    const findKey = (keywords) => headers.find(h => keywords.some(kw => h.toLowerCase().includes(kw.toLowerCase())));
+
+                    const locKey = findKey(['destination location', 'موقع الوجهة', 'location']);
+                    const typeKey = findKey(['internal type', 'product category', 'category', 'النوع الداخلي', 'فئة', 'type']);
+                    const demandKey = findKey(['demand', 'الطلب', 'quantity', 'qty']);
+
+                    if (!typeKey) return showError('Pivot', "لم نتمكن من العثور على عمود (Internal Type).");
+                    if (!demandKey) return showError('Pivot', "لم نتمكن من العثور على عمود (Demand).");
+                    if (!locKey) return showError('Pivot', "لم نتمكن من العثور على عمود الفروع (Destination Location).");
+
+                    const cleanData = rawData.filter(row => {
+                        const d = row[demandKey];
+                        return d !== null && d !== undefined && d !== '' && !isNaN(parseFloat(d));
+                    });
+
+                    if(cleanData.length === 0) return showError('Pivot', "الشيت لا يحتوي على أي طلبات صالحة.");
+
+                    const pivot = {};
+                    const typesSet = new Set();
+
+                    cleanData.forEach(row => {
+                        const loc = row[locKey] || 'غير محدد';
+                        const typeVal = row[typeKey];
+                        const type = (typeVal && typeVal.toString().trim() !== '') ? typeVal : 'بدون تصنيف';
+                        const demand = parseFloat(row[demandKey]) || 0;
+
+                        typesSet.add(type);
+                        if(!pivot[loc]) pivot[loc] = {};
+                        if(!pivot[loc][type]) pivot[loc][type] = 0;
+                        pivot[loc][type] += demand;
+                    });
+
+                    const types = Array.from(typesSet).sort();
+                    const aoa = [];
+                    
+                    aoa.push([]); 
+                    aoa.push([`Sum of ${demandKey}`, 'Column Labels']); 
+                    aoa.push(['Row Labels', ...types, 'Grand Total']); 
+
+                    const colTotals = {};
+                    types.forEach(t => colTotals[t] = 0);
+                    let superGrandTotal = 0;
+                    let maxLocLength = 30; 
+
+                    const locations = Object.keys(pivot).sort();
+                    locations.forEach(loc => {
+                        if (loc.length > maxLocLength) maxLocLength = loc.length;
+                        let rowTotal = 0;
+                        const row = [loc];
+                        types.forEach(t => {
+                            const val = pivot[loc][t] || 0;
+                            row.push(val); 
+                            rowTotal += val;
+                            colTotals[t] += val;
+                        });
+                        row.push(rowTotal);
+                        superGrandTotal += rowTotal;
+                        aoa.push(row);
+                    });
+
+                    const finalRow = ['Grand Total'];
+                    types.forEach(t => finalRow.push(colTotals[t]));
+                    finalRow.push(superGrandTotal);
+                    aoa.push(finalRow);
+
+                    const wb = new ExcelJS.Workbook();
+                    const wsPivot = wb.addWorksheet('Sheet2', { views: [{ rightToLeft: false }] }); 
+
+                    aoa.forEach(row => wsPivot.addRow(row));
+                    const totalCols = types.length + 2;
+
+                    wsPivot.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+                        for (let col = 1; col <= totalCols; col++) {
+                            const cell = row.getCell(col);
+                            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                            if (rowNumber >= 3) {
+                                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                            }
+                        }
+                    });
+
+                    wsPivot.getRow(2).font = { bold: true };
+                    wsPivot.getRow(3).font = { bold: true };
+                    wsPivot.lastRow.font = { bold: true };
+                    wsPivot.getColumn(1).eachCell({ includeEmpty: true }, (cell, rowNumber) => { if(rowNumber >= 3) cell.font = { bold: true }; });
+                    wsPivot.getColumn(totalCols).eachCell({ includeEmpty: true }, (cell, rowNumber) => { if(rowNumber >= 3) cell.font = { bold: true }; });
+
+                    wsPivot.getColumn(1).width = maxLocLength + 5; 
+                    for(let i = 2; i <= totalCols; i++) wsPivot.getColumn(i).width = 18; 
+
+                    const wsClean = wb.addWorksheet('Sheet1');
+                    if (cleanData.length > 0) {
+                        const headersClean = Object.keys(cleanData[0]);
+                        wsClean.addRow(headersClean).font = { bold: true }; 
+                        cleanData.forEach(r => wsClean.addRow(headersClean.map(h => r[h])));
+                    }
+
+                    const buffer = await wb.xlsx.writeBuffer();
+                    finalBlobPivot = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+                    document.getElementById('dropZoneContainerPivot').style.display = 'none';
+                    document.getElementById('successDetailsPivot').innerText = `تم التعرف على ${types.length} فئة و ${locations.length} فرع.`;
+                    document.getElementById('successStatePivot').classList.remove('hidden');
+
+                } catch(err) { showError('Pivot', "حدث خطأ: " + err.message); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // ==========================================
+        // 2. منطق أداة تعبئة الملاحظات (الجديدة)
+        // ==========================================
+        function processExcelNotes(file) {
+            if(!_verifyIntegrity()) return triggerAntiTamper();
+
+            const noteText = document.getElementById('noteInput').value.trim();
+            if(!noteText) {
+                return showError('Notes', "يرجى كتابة النوتة في المربع المخصص أولاً قبل رفع الشيت!");
+            }
+
+            document.getElementById('dropZoneContentNotes').classList.add('hidden');
+            document.getElementById('loadingStateNotes').classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    let rawData = XLSX.utils.sheet_to_json(worksheet, {defval: null});
+
+                    if(rawData.length === 0) return showError('Notes', "الملف فارغ تماماً.");
+
+                    // البحث عن عمود الـ Notes ولو مش موجود نضيفه
+                    let noteKey = Object.keys(rawData[0]).find(k => k.toLowerCase() === 'notes' || k.includes('ملاحظ'));
+                    if(!noteKey) noteKey = 'Notes';
+
+                    // البحث عن عمود الـ ID
+                    let idKey = Object.keys(rawData[0]).find(k => k.toLowerCase() === 'id');
+
+                    // تعبئة النوتة بناءً على نوع السطر
+                    rawData.forEach(row => { 
+                        if(idKey && row[idKey]) {
+                            // لو العنصر بيبدأ بـ __export__ يبقى ده سطر منتج وياخد النوتة
+                            if(String(row[idKey]).startsWith('__export__')) {
+                                row[noteKey] = noteText;
+                            } else {
+                                // لو مبدأش بـ export يبقى ده عنوان الفرع ونسيبه فاضي
+                                row[noteKey] = null;
+                            }
+                        } else {
+                            // لو مفيش id أصلا، بنحط النوتة كبديل أخير
+                            row[noteKey] = noteText;
+                        }
+                    });
+
+                    const wb = new ExcelJS.Workbook();
+                    const ws = wb.addWorksheet('Sheet1', { views: [{ rightToLeft: false }] });
+
+                    const headers = Object.keys(rawData[0]);
+                    ws.addRow(headers);
+
+                    // حساب عرض الأعمدة
+                    const colWidths = {};
+                    headers.forEach((h, i) => colWidths[i+1] = h.length);
+
+                    rawData.forEach(r => {
+                        const rowArr = headers.map(h => r[h]);
+                        ws.addRow(rowArr);
+                        rowArr.forEach((val, index) => {
+                            if(val) {
+                                const len = val.toString().length;
+                                if(len > colWidths[index+1]) colWidths[index+1] = len;
+                            }
+                        });
+                    });
+
+                    // تنسيق Grid والخلفيات
+                    const totalCols = headers.length;
+                    const idColIndex = idKey ? headers.findIndex(h => h === idKey) + 1 : 1;
+
+                    ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+                        let isGroupHeader = false;
+                        
+                        // تحديد هل السطر ده لعنوان فرع؟
+                        if(rowNumber > 1 && idColIndex > 0) {
+                            const idVal = row.getCell(idColIndex).value;
+                            if(idVal && !String(idVal).startsWith('__export__')) {
+                                isGroupHeader = true;
+                            }
+                        }
+
+                        for(let col=1; col<=totalCols; col++) {
+                            const cell = row.getCell(col);
+                            
+                            // عمل حدود للخلايا
+                            cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                            
+                            if (isGroupHeader) {
+                                // لو عنوان فرع بنديله خط بولد ولون رصاصي ومحاذاة لليسار
+                                cell.font = { bold: true };
+                                cell.fill = {
+                                    type: 'pattern',
+                                    pattern: 'solid',
+                                    fgColor: { argb: 'FFE9ECEF' }
+                                };
+                                cell.alignment = { vertical: 'middle', horizontal: 'left' };
+                            } else {
+                                // لو سطر عادي محاذاة للنص
+                                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                            }
+                        }
+                        
+                        // تنسيق رأس الجدول (أول صف)
+                        if(rowNumber === 1) {
+                            row.font = { bold: true };
+                            row.alignment = { vertical: 'middle', horizontal: 'center' };
+                        }
+                    });
+
+                    // تطبيق عرض الأعمدة مع وضع حد أقصى للخلية عشان متبقاش عريضة بزيادة
+                    headers.forEach((h, i) => { 
+                        let finalWidth = colWidths[i+1] + 5;
+                        if(finalWidth > 90) finalWidth = 90;
+                        ws.getColumn(i+1).width = finalWidth; 
+                    });
+
+                    const buffer = await wb.xlsx.writeBuffer();
+                    finalBlobNotes = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+                    document.getElementById('dropZoneContainerNotes').style.display = 'none';
+                    document.getElementById('successDetailsNotes').innerText = `تمت إضافة الملاحظات وتنسيق أسطر الفروع باللون الرمادي!`;
+                    document.getElementById('successStateNotes').classList.remove('hidden');
+
+                } catch(err) { showError('Notes', "حدث خطأ: " + err.message); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // ==========================================
+        // 3. منطق أداة الاوت (اوت من المندوب + اوت من المصنع)
+        // ==========================================
+        function outCellPlain(v) {
+            if (v === null || v === undefined) return null;
+            if (v instanceof Date) return v;
+            if (typeof v === 'object') {
+                if (v.richText) return v.richText.map(t => t.text).join('');
+                if ('result' in v) return outCellPlain(v.result);
+                if ('text' in v) return String(v.text);
+                if ('error' in v) return null;
+                return null;
+            }
+            return v;
+        }
+
+        function outCellText(v) {
+            const p = outCellPlain(v);
+            return (p === null || p === undefined) ? '' : String(p).trim();
+        }
+
+        function outCellNum(v) {
+            const p = outCellPlain(v);
+            if (typeof p === 'number') return p;
+            if (typeof p === 'string' && p.trim() !== '') {
+                const n = Number(p.replace(/,/g, '').trim());
+                return isNaN(n) ? null : n;
+            }
+            return null;
+        }
+
+        // هل الخلية ليها لون رمادي؟ (عناوين الفروع)
+        function outIsGrayFill(fill) {
+            if (!fill || fill.type !== 'pattern' || !fill.pattern || fill.pattern === 'none') return false;
+            const c = fill.fgColor;
+            if (!c) return false;
+            if (c.argb) {
+                const hex = String(c.argb).slice(-6);
+                if (!/^[0-9a-fA-F]{6}$/.test(hex)) return false;
+                const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+                const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+                return (mx - mn) <= 24 && mx < 252 && mx > 120;   // رمادي مش أبيض ومش أسود
+            }
+            if (c.theme !== undefined) return (c.tint || 0) < 0;   // لون ثيم أغمق من الأبيض
+            if (c.indexed !== undefined) return [22, 23, 55].includes(c.indexed);
+            return false;
+        }
+
+        // بتقسم الصفوف: اوت من المندوب / اوت من المصنع / تجاهل الرمادي
+        function classifyOutRows(rows, idx) {
+            const out = { courier: [], factory: [], skippedGray: 0, checked: 0 };
+            rows.forEach(r => {
+                if (r.isEmpty) return;
+
+                // 1) الصفوف الرمادي (أو اللي مفيهاش منتج/كمية) بتتجاهل
+                const idVal = idx.id >= 0 ? outCellText(r.values[idx.id]) : '';
+                const idHeader = idx.id >= 0 && idVal !== '' && !idVal.startsWith('__export__');
+                const noProduct = idx.product >= 0 && outCellText(r.values[idx.product]) === '';
+                if (r.isGray || idHeader || noProduct) { out.skippedGray++; return; }
+
+                const statusTxt = idx.status >= 0 ? outCellText(r.values[idx.status]).toLowerCase() : '';
+                const demand = outCellNum(r.values[idx.demand]);
+                const qty = outCellNum(r.values[idx.qty]);
+
+                // 2) Cancel = اوت من المصنع
+                if (/cancel|ملغ/.test(statusTxt)) { out.factory.push(r); return; }
+
+                // 3) فرق بين Demand و Quantity = اوت من المندوب
+                if (demand === null || qty === null) return;
+                out.checked++;
+                if (Math.abs(demand - qty) > 1e-9) out.courier.push(r);
+            });
+            return out;
+        }
+
+        function outColLetter(n) {   // 1 -> A
+            let s = '';
+            while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+            return s;
+        }
+
+        function outStyleHeader(ws, totalCols) {
+            const row = ws.getRow(1);
+            row.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            for (let c = 1; c <= totalCols; c++) {
+                const cell = row.getCell(c);
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+                cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+            }
+        }
+
+        function processExcelOut(file) {
+            if(!_verifyIntegrity()) return triggerAntiTamper();
+            document.getElementById('dropZoneContentOut').classList.add('hidden');
+            document.getElementById('loadingStateOut').classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const srcWb = new ExcelJS.Workbook();
+                    await srcWb.xlsx.load(e.target.result);
+                    const srcWs = srcWb.worksheets[0];
+                    if (!srcWs || srcWs.rowCount < 2) return showError('Out', "الملف فارغ تماماً.");
+
+                    // ---- الهيدر ----
+                    const nCols = srcWs.columnCount;
+                    const headers = [];
+                    for (let c = 1; c <= nCols; c++) headers.push(outCellText(srcWs.getRow(1).getCell(c).value));
+                    const find = (fn) => headers.findIndex(h => fn(h.toLowerCase()));
+                    const idx = {
+                        location: find(h => h.includes('destination location') || h.includes('موقع الوجهة')),
+                        product:  find(h => h.includes('product/name') || h === 'product' || h.includes('اسم المنتج')),
+                        demand:   find(h => h.includes('demand') || h.includes('الطلب')),
+                        qty:      find(h => (h.includes('quantity') && !h.includes('demand')) || h.includes('الكمية')),
+                        status:   find(h => h.includes('status') || h.includes('الحالة')),
+                        id:       find(h => h === 'id')
+                    };
+                    if (idx.demand < 0) return showError('Out', "لم نتمكن من العثور على عمود (Stock Moves/Demand).");
+                    if (idx.qty < 0) return showError('Out', "لم نتمكن من العثور على عمود (Stock Moves/Quantity).");
+
+                    // ---- قراءة الصفوف مع معرفة الألوان ----
+                    const rows = [];
+                    for (let r = 2; r <= srcWs.rowCount; r++) {
+                        const srcRow = srcWs.getRow(r);
+                        const values = [];
+                        const styles = [];
+                        let nonEmpty = false;
+                        let gray = false;
+                        for (let c = 1; c <= nCols; c++) {
+                            const cell = srcRow.getCell(c);
+                            const v = outCellPlain(cell.value);
+                            values.push(cell.value);
+                            styles.push(cell.style);
+                            if (v !== null && String(v).trim() !== '') nonEmpty = true;
+                            if (c <= 3 && outIsGrayFill(cell.fill)) gray = true;
+                        }
+                        rows.push({ rowNumber: r, values, styles, isEmpty: !nonEmpty, isGray: gray });
+                    }
+
+                    const res = classifyOutRows(rows, idx);
+
+                    // ---- بناء الملف النهائي ----
+                    const wb = new ExcelJS.Workbook();
+                    const thin = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+
+                    // الشيت الخام زي ما هو
+                    const wsRaw = wb.addWorksheet('Sheet1');
+                    wsRaw.addRow(headers).font = { bold: true };
+                    rows.forEach(r => {
+                        if (r.isEmpty) return;
+                        const newRow = wsRaw.addRow(r.values.map(v => outCellPlain(v)));
+                        r.styles.forEach((st, i) => {
+                            try { newRow.getCell(i + 1).style = JSON.parse(JSON.stringify(st)); } catch (_) {}
+                        });
+                    });
+                    headers.forEach((h, i) => { wsRaw.getColumn(i + 1).width = Math.min(Math.max(h.length + 4, 16), 60); });
+
+                    // صفحة اوت من المندوب
+                    const wsCourier = wb.addWorksheet('اوت من المندوب');
+                    wsCourier.addRow([...headers, 'Difference (Demand - Quantity)', 'Note']);
+                    outStyleHeader(wsCourier, nCols + 2);
+                    const dL = outColLetter(idx.demand + 1), qL = outColLetter(idx.qty + 1);
+                    res.courier.forEach(r => {
+                        const rowNum = wsCourier.rowCount + 1;
+                        const demand = outCellNum(r.values[idx.demand]);
+                        const qty = outCellNum(r.values[idx.qty]);
+                        const newRow = wsCourier.addRow([
+                            ...r.values.map(v => outCellPlain(v)),
+                            { formula: `${dL}${rowNum}-${qL}${rowNum}`, result: demand - qty },
+                            'اوت من المندوب'
+                        ]);
+                        for (let c = 1; c <= nCols + 2; c++) {
+                            const cell = newRow.getCell(c);
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+                            cell.border = thin;
+                            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                        }
+                        newRow.getCell(nCols + 2).font = { bold: true, color: { argb: 'FFC00000' } };
+                    });
+
+                    // صفحة اوت من المصنع
+                    const wsFactory = wb.addWorksheet('اوت من المصنع');
+                    wsFactory.addRow([...headers, 'Note']);
+                    outStyleHeader(wsFactory, nCols + 1);
+                    res.factory.forEach(r => {
+                        const newRow = wsFactory.addRow([...r.values.map(v => outCellPlain(v)), 'اوت من المصنع (Cancel)']);
+                        for (let c = 1; c <= nCols + 1; c++) {
+                            const cell = newRow.getCell(c);
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE2E2' } };
+                            cell.border = thin;
+                            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                        }
+                        newRow.getCell(nCols + 1).font = { bold: true, color: { argb: 'FFC00000' } };
+                    });
+
+                    [wsCourier, wsFactory].forEach(ws => {
+                        ws.views = [{ state: 'frozen', ySplit: 1 }];
+                        for (let c = 1; c <= ws.columnCount; c++) {
+                            let w = 14;
+                            ws.getColumn(c).eachCell({ includeEmpty: false }, cell => {
+                                const len = outCellText(cell.value).length;
+                                if (len + 4 > w) w = len + 4;
+                            });
+                            ws.getColumn(c).width = Math.min(w, 60);
+                        }
+                    });
+
+                    const buffer = await wb.xlsx.writeBuffer();
+                    finalBlobOut = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+                    document.getElementById('dropZoneContainerOut').style.display = 'none';
+                    document.getElementById('successDetailsOut').innerHTML =
+                        `اوت من المندوب: <b>${res.courier.length}</b> سطر &nbsp;|&nbsp; اوت من المصنع (Cancel): <b>${res.factory.length}</b> سطر` +
+                        `<br>صفوف رمادي تم تجاهلها: ${res.skippedGray} &nbsp;|&nbsp; صفوف تم فحصها: ${res.checked}`;
+                    document.getElementById('successStateOut').classList.remove('hidden');
+
+                } catch(err) { showError('Out', "حدث خطأ: " + err.message); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+</html>
