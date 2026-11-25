@@ -27,6 +27,19 @@
             الاداة ديه بقا انا عاملها مخصوصة لابو بكر صديقي العزيز الشاعر صاحب اكبر قناة يوتيوب للتحدث عن الاحاديث الدينية والاداة ديه حبه له وتسهيل له في الشغل واحلي مسا علي فخادك يا غالي 😂😂❤️💋.
         </div>
 
+        <div class="mb-6 border border-slate-200 rounded-2xl p-5">
+            <p class="font-bold text-slate-700 text-sm mb-3">ترتيب المنتجات (اختياري)</p>
+            <label class="flex items-center gap-3 mb-2 cursor-pointer">
+                <input type="checkbox" id="chkDesserts" class="w-5 h-5 accent-indigo-600">
+                <span class="font-bold text-slate-700">BFC-Desserts</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" id="chkBakeries" class="w-5 h-5 accent-indigo-600">
+                <span class="font-bold text-slate-700">BFC-FF-Bakeries</span>
+            </label>
+            <p class="text-xs text-slate-400 mt-3 leading-6">لو محددتش حاجة، الشيت هيطلع بكل المنتجات زي الأول. اختار قبل ما ترفع الشيت.</p>
+        </div>
+
         <div id="dropZone" class="border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/50 p-10 text-center transition-all hover:bg-indigo-50 hover:border-indigo-400 cursor-pointer flex flex-col items-center justify-center">
             <div id="dropContent">
                 <div class="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i class="fa-solid fa-bolt"></i></div>
@@ -49,6 +62,8 @@
         <div id="successBox" class="hidden mt-6 text-center">
             <h4 class="text-lg font-bold text-slate-800">سحبة الأعداد جاهزة!</h4>
             <p id="successDetails" class="text-xs text-emerald-600 mt-2 font-medium bg-emerald-50 inline-block px-3 py-1 rounded-full border border-emerald-100 leading-6"></p>
+            <div id="prodBox" class="hidden mt-4 text-right bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-rose-800 leading-7"></div>
+            <div id="missingBox" class="hidden mt-4 text-right bg-sky-50 border border-sky-200 rounded-xl p-4 text-sm text-sky-800 leading-7"></div>
             <div id="warnBox" class="hidden mt-4 text-right bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 leading-7"></div>
             <div class="mt-5 flex gap-3 justify-center flex-wrap">
                 <button onclick="downloadResult()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/30 flex items-center gap-2"><i class="fa-solid fa-download"></i> تحميل الشيت الجاهز</button>
@@ -142,7 +157,29 @@ function matchBranch(loc) {
 /* ---------- بناء المصفوفة ---------- */
 function cmp(a, b) { const x = String(a).toLowerCase(), y = String(b).toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; }
 
-function buildMatrix(rows, keys) {
+/* ترتيب المنتجات لكل كاتيجري */
+const PRODUCT_LISTS = {
+    desserts: [
+        'Breadfast Classic Millefeuille Cup - BC','Banana Pudding - BC','Breadfast Tiramisu - BC (230g)',
+        'Breadfast Carrot Can Cake - BC','Lotus Banana Pudding - BC','Breadfast Chocolate Fudge Cake - BC',
+        'Breadfast Chocolate Krunchoco Classic - BC','Chocolate Muffin - BC','Brownie Bites Raspberry Cheesecake - BC',
+        'Brownie Bites The Crunch Mix','High Protein Banana Pudding - BC','High Protein Blueberry cheesecake - BC',
+        'High Protein Strawberry cheesecake - BC','High Protein Tiramisu - BC','Sliced Chocolate Pound Cake',
+        'Sliced Orange Cake','Sliced Marble Pound Cake'
+    ],
+    bakeries: [
+        'Plain Croissant - BC','Chocolate Hazelnut Croissant - BC','BFC - Cream Cheese Parm. Tapenade Danish',
+        'Cheese Croissant - BC','BFC - Pain au Chocolat','Turkey & Cheddar Croissant - BC',
+        'Pastrami & Cream Cheese Croissant - BC','Fucaccia Hot Dog Roll - BC','Chocolate Hazelnut Donut - BC',
+        'Glazed Donut - BC','BFC - Chicken Ranch Danish','Chocolate Sprinkles Donut - BC','Chocolate Custard Cream Donut - BC'
+    ]
+};
+// مفتاح توحيد اسم المنتج: يشيل كود [..] في الأول وكل الرموز والمسافات
+function prodKey(s) {
+    return String(s).toLowerCase().replace(/^\s*\[[^\]]*\]\s*/, '').replace(/[^a-z0-9\u0600-\u06FF]+/g, '');
+}
+
+function buildMatrix(rows, keys, selected) {
     const byProd = new Map();
     const extra = new Map(); // فروع مش متعرّف عليها: اسم خام
     let used = 0;
@@ -160,15 +197,39 @@ function buildMatrix(rows, keys) {
         const m = byProd.get(prod);
         m.set(col, (m.get(col) || 0) + d);
     });
-    const unknownCols = [...extra.keys()].sort((a, b) => cmp(extra.get(a), extra.get(b)));
-    const colKeys = BRANCHES.map((_, i) => 'B' + i).concat(unknownCols);
-    const locs = BRANCHES.map(b => b.name).concat(unknownCols.map(k => extra.get(k)));
-    const products = [...byProd.keys()].sort(cmp);
+
+    // اختيار المنتجات وترتيبها
+    let products, notFound = [], zeroQty = [];
+    const sum = p => [...byProd.get(p).values()].reduce((a, v) => a + v, 0);
+    if (selected.length) {
+        const keyToProd = new Map();
+        byProd.forEach((_, p) => { const k = prodKey(p); if (!keyToProd.has(k)) keyToProd.set(k, p); });
+        products = [];
+        selected.forEach(listName => PRODUCT_LISTS[listName].forEach(wanted => {
+            const p = keyToProd.get(prodKey(wanted));
+            if (!p) notFound.push(wanted);
+            else if (sum(p) === 0) zeroQty.push(wanted);
+            else products.push(p);
+        }));
+    } else {
+        products = [...byProd.keys()].sort(cmp);
+    }
+
+    // الفروع: بس اللي ليها سطر في المنتجات اللي هتنزل
+    const present = new Set();
+    products.forEach(p => byProd.get(p).forEach((_, k) => present.add(k)));
+    const unknownCols = [...extra.keys()].filter(k => present.has(k)).sort((a, b) => cmp(extra.get(a), extra.get(b)));
+    const knownIdx = BRANCHES.map((_, i) => i).filter(i => present.has('B' + i));
+    const missing = BRANCHES.map((b, i) => i).filter(i => !present.has('B' + i)).map(i => BRANCHES[i].name);
+    const colKeys = knownIdx.map(i => 'B' + i).concat(unknownCols);
+    const locs = knownIdx.map(i => BRANCHES[i].name).concat(unknownCols.map(k => extra.get(k)));
+
     const cells = products.map(p => colKeys.map(k => byProd.get(p).has(k) ? byProd.get(p).get(k) : null));
     const rowTotals = cells.map(r => r.reduce((a, v) => a + (v || 0), 0));
     const colTotals = colKeys.map((_, j) => cells.reduce((a, r) => a + (r[j] || 0), 0));
     const grand = rowTotals.reduce((a, v) => a + v, 0);
-    return { products, locs, cells, rowTotals, colTotals, grand, used, unknown: unknownCols.map(k => extra.get(k)) };
+    return { products, locs, cells, rowTotals, colTotals, grand, used, unknown: unknownCols.map(k => extra.get(k)),
+             missing, knownCount: knownIdx.length, notFound, zeroQty };
 }
 
 function lineCount(text, perLine) {
@@ -208,7 +269,7 @@ function buildWorkbook(mx) {
     put(1, 2, 'Grand Total', TEAL);
     let headLines = 1;
     mx.locs.forEach((l, j) => {
-        put(1, j + 3, l, j < BRANCHES.length ? BLUE : AMBER);
+        put(1, j + 3, l, j < mx.knownCount ? BLUE : AMBER);
         headLines = Math.max(headLines, lineCount(l, 13));
     });
     ws.getRow(1).height = Math.max(60, headLines * 15.75 + 10);
@@ -276,14 +337,31 @@ function processFile(file) {
             if (!keys.loc) return showError('مش لاقي عمود (Stock Moves/Destination Location).');
             if (!keys.demand) return showError('مش لاقي عمود (Stock Moves/Demand).');
 
-            const mx = buildMatrix(raw, keys);
-            if (!mx.products.length) return showError('الشيت مفيهوش أي أوردرات صالحة.');
+            const selected = [];
+            if ($('chkDesserts').checked) selected.push('desserts');
+            if ($('chkBakeries').checked) selected.push('bakeries');
+            const mx = buildMatrix(raw, keys, selected);
+            if (!mx.products.length) return showError(selected.length
+                ? 'مفيش ولا منتج من الكاتيجري المختار ليه كمية في السحبة دي.'
+                : 'الشيت مفيهوش أي أوردرات صالحة.');
 
             const buffer = await buildWorkbook(mx).xlsx.writeBuffer();
             finalBlob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
             dropZone.style.display = 'none';
-            $('successDetails').innerHTML = `<b>${mx.products.length}</b> منتج × <b>${BRANCHES.length}</b> فرع &nbsp;|&nbsp; إجمالي الأعداد: <b>${mx.grand}</b>`;
+            $('successDetails').innerHTML = `<b>${mx.products.length}</b> منتج × <b>${mx.knownCount}</b> فرع &nbsp;|&nbsp; إجمالي الأعداد: <b>${mx.grand}</b>`;
+            const pb = $('prodBox');
+            let ph = '';
+            const li = a => a.map(u => '• ' + u.replace(/</g, '&lt;')).join('<br>');
+            if (mx.notFound.length) ph += `<b><i class="fa-solid fa-circle-xmark ml-1"></i> ${mx.notFound.length} منتج غير موجود في سحبة الأودو، ومحطتهمش في الشيت:</b><br>${li(mx.notFound)}<br>`;
+            if (mx.zeroQty.length) ph += `<b><i class="fa-solid fa-circle-exclamation ml-1"></i> ${mx.zeroQty.length} منتج لقيت كميته صفر، ومحطتهمش في الشيت:</b><br>${li(mx.zeroQty)}`;
+            if (ph) { pb.innerHTML = ph; pb.classList.remove('hidden'); } else pb.classList.add('hidden');
+            const miss = $('missingBox');
+            if (mx.missing.length) {
+                miss.innerHTML = `<b><i class="fa-solid fa-circle-info ml-1"></i> مفيش شغل على ${mx.missing.length} فرع في السحبة دي، فمحطتهمش في الشيت:</b><br>` +
+                    mx.missing.map(u => '• ' + u.replace(/</g, '&lt;')).join('<br>');
+                miss.classList.remove('hidden');
+            } else miss.classList.add('hidden');
             const warn = $('warnBox');
             if (mx.unknown.length) {
                 warn.innerHTML = `<b><i class="fa-solid fa-triangle-exclamation ml-1"></i> فيه ${mx.unknown.length} موقع مش متعرّف عليه، اتضافوا في آخر الشيت (أعمدة صفراء) بالاسم زي ما جه من أودو:</b><br>` +
