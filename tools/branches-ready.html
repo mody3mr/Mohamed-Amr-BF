@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سحبة أعداد فروع جاهزة | Odoo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+        body { font-family: 'Tajawal', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-6">
+
+<div class="max-w-2xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+    <div class="bg-indigo-600 p-8 text-center">
+        <i class="fa-solid fa-bolt text-5xl text-white mb-4"></i>
+        <h1 class="text-3xl font-bold text-white">سحبة أعداد فروع جاهزة</h1>
+        <p class="text-indigo-200 mt-2 text-sm">الفروع بترتيب ثابت وبأسمائها المختصرة</p>
+    </div>
+
+    <div class="p-8">
+        <div class="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-5 mb-6 text-sm text-slate-600 leading-7">
+            ارفع سحبة الأودو الخام وهينزلك شيت المنتجات في الصفوف والفروع في الأعمدة بنفس الترتيب المتفق عليه.
+        </div>
+
+        <div id="dropZone" class="border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/50 p-10 text-center transition-all hover:bg-indigo-50 hover:border-indigo-400 cursor-pointer flex flex-col items-center justify-center">
+            <div id="dropContent">
+                <div class="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i class="fa-solid fa-bolt"></i></div>
+                <p class="font-bold text-slate-700">اضغط هنا لرفع شيت أودو الخام</p>
+                <p class="text-xs text-slate-400 mt-1">أو اسحب وأفلت الشيت هنا</p>
+            </div>
+            <div id="loading" class="hidden text-indigo-500">
+                <i class="fa-solid fa-circle-notch fa-spin text-3xl mb-2"></i>
+                <p class="font-bold">جاري المعالجة...</p>
+            </div>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden">
+
+        <div id="errorBox" class="hidden mt-6 text-center bg-rose-50 border border-rose-200 p-6 rounded-2xl">
+            <i class="fa-solid fa-triangle-exclamation text-3xl text-rose-500 mb-2"></i>
+            <p id="errorMsg" class="text-sm text-rose-600 font-medium"></p>
+            <button onclick="resetTool()" class="mt-4 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 px-6 py-2 rounded-lg font-bold text-sm">حاول مرة تانية</button>
+        </div>
+
+        <div id="successBox" class="hidden mt-6 text-center">
+            <h4 class="text-lg font-bold text-slate-800">سحبة الأعداد جاهزة!</h4>
+            <p id="successDetails" class="text-xs text-emerald-600 mt-2 font-medium bg-emerald-50 inline-block px-3 py-1 rounded-full border border-emerald-100 leading-6"></p>
+            <div id="warnBox" class="hidden mt-4 text-right bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 leading-7"></div>
+            <div class="mt-5 flex gap-3 justify-center flex-wrap">
+                <button onclick="downloadResult()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/30 flex items-center gap-2"><i class="fa-solid fa-download"></i> تحميل الشيت الجاهز</button>
+                <button onclick="resetTool()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-6 py-3 rounded-xl font-bold">شيت جديد</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-8 text-center">
+    <a href="https://wa.me/201094264206" target="_blank" class="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-emerald-600 bg-white/60 px-5 py-2.5 rounded-full border border-slate-200 shadow-sm">
+        <i class="fa-brands fa-whatsapp text-lg text-emerald-500"></i> © 2026 تم الإنشاء بواسطة | محمد عمرو ابراهيم
+    </a>
+</div>
+
+<script>
+/* ==========================================================
+   قائمة الفروع بالترتيب المطلوب (من اليسار لليمين في الشيت)
+   name    = الاسم اللي هيظهر في الهيدر
+   aliases = أي كلمات ممكن تظهر بيها في اسم الموقع في أودو (عربي أو إنجليزي).
+             لو فرع طلع في "مش متعرّف عليه" ضيف اسمه هنا.
+   ========================================================== */
+const BRANCHES = [
+    { name: 'City Center Alex', aliases: ['city center alex','city center alexandria','سيتي سنتر اسكندريه','سيتي سنتر الاسكندريه'] },
+    { name: 'Total Alex', aliases: ['total alex','total alexandria','توتال اليكس','توتال اسكندريه'] },
+    { name: 'Green Plaza', aliases: ['green plaza','جرين بلازا'] },
+    { name: 'Mall Of Egypt', aliases: ['mall of egypt','مول مصر'] },
+    { name: 'Total Zayed', aliases: ['total zayed','total sheikh zayed','توتال زايد'] },
+    { name: 'Fuel-up Zayed', aliases: ['fuel up zayed','fuelup zayed','fill up zayed','fillup zayed','full up zayed','فول اب زايد'] },
+    { name: 'Mall Of Arabia', aliases: ['mall of arabia','مول العرب'] },
+    { name: 'Poly Park', aliases: ['poly park','polypark','polly park','بولي بارك'] },
+    { name: 'Smart', aliases: ['smart','اسمارت'] },
+    { name: 'NEW Giza', aliases: ['new giza','نيو جيزه'] },
+    { name: 'Madinaty Strip Zone', aliases: ['madinaty strip zone','strip zone','stripzone','astrab zone','استراب زوان'] },
+    { name: 'Madinaty Open Air', aliases: ['madinaty open air','open air mall','open air','اوبن اير'] },
+    { name: 'Madinaty East Hub', aliases: ['madinaty east hub','east hub','ايست هاب'] },
+    { name: 'Almaza', aliases: ['almaza','al maza','الماظه'] },
+    { name: 'City Stars', aliases: ['city stars','city star','سيتي ستار'] },
+    { name: 'Al burouj', aliases: ['al burouj','al borouj','el burouj','el borouj','burouj','borouj','البروج'] },
+    { name: 'BUE', aliases: ['bue'] },
+    { name: 'ADNOC Shorouk', aliases: ['adnoc shorouk','adnoc el shorouk','adnoc shrouk','ادنوج الشروق','ادنوك الشروق'] },
+    { name: 'Drive', aliases: ['drive','درايف'] },
+    { name: 'Golden', aliases: ['golden','جولدن'] },
+    { name: 'Narges', aliases: ['narges','nargis','narjis','نرجس'] },
+    { name: 'Campus', aliases: ['campus','كامبوس'] },
+    { name: 'City Center Maadi', aliases: ['city center maadi','سيتي سنتر المعادي'] },
+    { name: 'Maadi 233', aliases: ['maadi 233','233'] },
+    { name: 'Mindhaus', aliases: ['mindhaus','mind house','mindhouse','مايند هاوس'] },
+    { name: 'Halliburton', aliases: ['halliburton','هلبرتون'] },
+    { name: 'Mashreq Bank', aliases: ['mashreq bank','mashreq','بنك المشرق'] },
+    { name: 'Chillout El Rehab', aliases: ['chillout el rehab','chillout','chill out','el rehab','al rehab','rehab','الرحاب'] },
+    { name: 'Web Help', aliases: ['web help','webhelp','ويب هلب'] },
+    { name: 'Schneider', aliases: ['schneider','اشنايدر'] },
+    { name: 'AUC', aliases: ['auc'] },
+    { name: 'Mountain View', aliases: ['mountain view','ماونتن فيو'] },
+    { name: 'Giza System', aliases: ['giza system','giza systems','جيزه سيستم'] },
+    { name: 'Korba', aliases: ['korba','corbet','corbeh','كوربه'] },
+    { name: 'Alex Bank', aliases: ['alex bank','bank alex','bank of alexandria','بنك اسكندريه'] },
+    { name: 'Cairo Bank', aliases: ['cairo bank','banque du caire','bank cairo','بنك القاهره'] },
+    { name: 'Etisalat', aliases: ['etisalat','اتصالات'] },
+    { name: 'Ahli United Bank', aliases: ['ahli united bank','ahli united','ahli bank','بنك اهلي'] },
+    { name: 'Ryze Club', aliases: ['ryze club','ryze','rise','رايز'] },
+    { name: 'P&G', aliases: ['p&g','p g','pg','p and g'] },
+    { name: 'Pepsico', aliases: ['pepsico','pepsi co','pepsi','ببسيكو'] },
+    { name: 'ENBD', aliases: ['enbd','emirates nbd'] },
+    { name: 'AIB', aliases: ['aib'] },
+    { name: 'Smash', aliases: ['smash','اسماش'] },
+    { name: 'Family', aliases: ['family park','family','فاملي بارك'] },
+    { name: 'B.Tech', aliases: ['b.tech','btech','b tech','بي تيك'] }
+];
+
+/* ---------- توحيد النص: عربي/إنجليزي، همزات، تاء مربوطة، رموز ---------- */
+function norm(s) {
+    return ' ' + String(s).toLowerCase()
+        .replace(/[\u064B-\u065F\u0640]/g, '')
+        .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+        .replace(/[^a-z0-9\u0600-\u06FF]+/g, ' ')
+        .replace(/\s+/g, ' ').trim() + ' ';
+}
+// فهرس الأسماء المستعارة (الأطول يكسب عشان "سيتي سنتر المعادي" ما يتلخبطش مع غيره)
+const ALIAS_INDEX = [];
+BRANCHES.forEach((b, i) => b.aliases.concat([b.name]).forEach(a => ALIAS_INDEX.push({ key: norm(a), idx: i })));
+ALIAS_INDEX.sort((a, b) => b.key.length - a.key.length);
+
+function matchBranch(loc) {
+    const n = norm(loc);
+    const hit = ALIAS_INDEX.find(a => n.includes(a.key));
+    return hit ? hit.idx : -1;
+}
+
+/* ---------- بناء المصفوفة ---------- */
+function cmp(a, b) { const x = String(a).toLowerCase(), y = String(b).toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; }
+
+function buildMatrix(rows, keys) {
+    const byProd = new Map();
+    const extra = new Map(); // فروع مش متعرّف عليها: اسم خام
+    let used = 0;
+    rows.forEach(r => {
+        const prod = String(r[keys.prod] ?? '').trim();
+        const loc = String(r[keys.loc] ?? '').trim();
+        const d = parseFloat(r[keys.demand]);
+        if (!prod || !loc || isNaN(d)) return;
+        used++;
+        let col;
+        const bi = matchBranch(loc);
+        if (bi >= 0) col = 'B' + bi;
+        else { col = 'X' + loc; extra.set(col, loc); }
+        if (!byProd.has(prod)) byProd.set(prod, new Map());
+        const m = byProd.get(prod);
+        m.set(col, (m.get(col) || 0) + d);
+    });
+    const unknownCols = [...extra.keys()].sort((a, b) => cmp(extra.get(a), extra.get(b)));
+    const colKeys = BRANCHES.map((_, i) => 'B' + i).concat(unknownCols);
+    const locs = BRANCHES.map(b => b.name).concat(unknownCols.map(k => extra.get(k)));
+    const products = [...byProd.keys()].sort(cmp);
+    const cells = products.map(p => colKeys.map(k => byProd.get(p).has(k) ? byProd.get(p).get(k) : null));
+    const rowTotals = cells.map(r => r.reduce((a, v) => a + (v || 0), 0));
+    const colTotals = colKeys.map((_, j) => cells.reduce((a, r) => a + (r[j] || 0), 0));
+    const grand = rowTotals.reduce((a, v) => a + v, 0);
+    return { products, locs, cells, rowTotals, colTotals, grand, used, unknown: unknownCols.map(k => extra.get(k)) };
+}
+
+function lineCount(text, perLine) {
+    let lines = 1, cur = 0;
+    String(text).split(/\s+/).filter(Boolean).forEach(w => {
+        if (cur === 0) cur = w.length;
+        else if (cur + 1 + w.length <= perLine) cur += 1 + w.length;
+        else { lines++; cur = w.length; }
+        while (cur > perLine) { lines++; cur -= perLine; }
+    });
+    return lines;
+}
+
+/* ---------- بناء ملف الإكسيل (نفس تنسيق أداة البوابة) ---------- */
+function buildWorkbook(mx) {
+    const BLUE = 'FFDCE6F1', TEAL = 'FF46BDC6', AMBER = 'FFFFE699';
+    const thin = { style: 'thin', color: { argb: 'FF000000' } };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
+    const align = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    const fill = a => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: a }, bgColor: { argb: a } });
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Sheet1', {
+        views: [{ state: 'frozen', xSplit: 2, ySplit: 0, topLeftCell: 'C1', activeCell: 'A1' }],
+        properties: { defaultColWidth: 12.5703125, defaultRowHeight: 15.75 }
+    });
+    ws.getColumn(1).width = 69.7109375;
+    const put = (r, c, v, f) => {
+        const cell = ws.getCell(r, c);
+        if (v !== null && v !== undefined) cell.value = v;
+        cell.font = font; cell.border = border; cell.alignment = align;
+        if (f) cell.fill = fill(f);
+    };
+
+    put(1, 1, 'Row Labels', BLUE);
+    put(1, 2, 'Grand Total', TEAL);
+    let headLines = 1;
+    mx.locs.forEach((l, j) => {
+        put(1, j + 3, l, j < BRANCHES.length ? BLUE : AMBER);
+        headLines = Math.max(headLines, lineCount(l, 13));
+    });
+    ws.getRow(1).height = Math.max(60, headLines * 15.75 + 10);
+
+    mx.products.forEach((p, i) => {
+        const r = i + 2;
+        put(r, 1, p, null);
+        put(r, 2, mx.rowTotals[i], TEAL);
+        mx.cells[i].forEach((v, j) => put(r, j + 3, v, null));
+        ws.getRow(r).height = 15.75 * Math.max(1, Math.ceil(String(p).length / 64));
+    });
+
+    const gr = mx.products.length + 2;
+    put(gr, 1, 'Grand Total', BLUE);
+    put(gr, 2, mx.grand, TEAL);
+    mx.colTotals.forEach((v, j) => put(gr, j + 3, v, BLUE));
+    return wb;
+}
+
+/* ---------- الواجهة ---------- */
+let finalBlob = null;
+const $ = id => document.getElementById(id);
+const dropZone = $('dropZone'), fileInput = $('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('border-indigo-500', 'bg-indigo-100'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-indigo-500', 'bg-indigo-100'));
+dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('border-indigo-500', 'bg-indigo-100');
+    if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) processFile(e.target.files[0]); });
+
+function showError(msg) {
+    $('loading').classList.add('hidden');
+    $('dropContent').classList.remove('hidden');
+    dropZone.style.display = 'none';
+    $('errorMsg').innerText = msg;
+    $('errorBox').classList.remove('hidden');
+}
+function resetTool() {
+    $('errorBox').classList.add('hidden'); $('successBox').classList.add('hidden');
+    $('loading').classList.add('hidden'); $('dropContent').classList.remove('hidden');
+    dropZone.style.display = ''; fileInput.value = ''; finalBlob = null;
+}
+
+function processFile(file) {
+    $('dropContent').classList.add('hidden');
+    $('loading').classList.remove('hidden');
+    const reader = new FileReader();
+    reader.onload = async e => {
+        try {
+            const wbIn = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const raw = XLSX.utils.sheet_to_json(wbIn.Sheets[wbIn.SheetNames[0]], { defval: null });
+            if (!raw.length) return showError('الملف فارغ تماماً.');
+
+            const headers = Object.keys(raw[0]);
+            const lo = h => h.toLowerCase();
+            const keys = {
+                prod: headers.find(h => lo(h).includes('product/name') || lo(h).includes('product name') || h.includes('اسم المنتج')),
+                loc: headers.find(h => lo(h).includes('destination location') || h.includes('موقع الوجهة')),
+                demand: headers.find(h => lo(h).includes('demand') || h.includes('الطلب')) || headers.find(h => lo(h).includes('quantity'))
+            };
+            if (!keys.prod) return showError('مش لاقي عمود (Stock Moves/Product/Name).');
+            if (!keys.loc) return showError('مش لاقي عمود (Stock Moves/Destination Location).');
+            if (!keys.demand) return showError('مش لاقي عمود (Stock Moves/Demand).');
+
+            const mx = buildMatrix(raw, keys);
+            if (!mx.products.length) return showError('الشيت مفيهوش أي أوردرات صالحة.');
+
+            const buffer = await buildWorkbook(mx).xlsx.writeBuffer();
+            finalBlob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+            dropZone.style.display = 'none';
+            $('successDetails').innerHTML = `<b>${mx.products.length}</b> منتج × <b>${BRANCHES.length}</b> فرع &nbsp;|&nbsp; إجمالي الأعداد: <b>${mx.grand}</b>`;
+            const warn = $('warnBox');
+            if (mx.unknown.length) {
+                warn.innerHTML = `<b><i class="fa-solid fa-triangle-exclamation ml-1"></i> فيه ${mx.unknown.length} موقع مش متعرّف عليه، اتضافوا في آخر الشيت (أعمدة صفراء) بالاسم زي ما جه من أودو:</b><br>` +
+                    mx.unknown.map(u => '• ' + u.replace(/</g, '&lt;')).join('<br>');
+                warn.classList.remove('hidden');
+            } else warn.classList.add('hidden');
+            $('loading').classList.add('hidden');
+            $('successBox').classList.remove('hidden');
+        } catch (err) { showError('حدث خطأ: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function downloadResult() {
+    if (!finalBlob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(finalBlob);
+    a.download = 'Branches_Ready_Sheet_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+</script>
+</body>
+</html>
