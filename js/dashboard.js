@@ -72,6 +72,12 @@ function readAccess(form) {
   };
 }
 function roleLabel(r) { return r === "admin" ? "مسؤول" : "مستخدم"; }
+const firstName = n => String(n || "").trim().split(/\s+/)[0] || "";
+// مفتاح مؤقت عشوائي بيتستخدم في أول دخول للموظف (بعدها الموظف بيختار كلمة المرور بنفسه)
+function randomKey() {
+  const a = new Uint8Array(18); crypto.getRandomValues(a);
+  return Array.from(a, b => b.toString(36).padStart(2, "0")).join("").slice(0, 24);
+}
 
 /* ------------------------------------------------------------------ data */
 async function loadTools() {
@@ -220,7 +226,7 @@ function renderUsers() {
       <td><span class="mono">${esc(u.employeeId)}</span></td>
       <td>${esc(u.name)} ${you ? '<span class="badge">انت</span>' : ""}</td>
       <td>${roleLabel(u.role)}</td>
-      <td><span class="badge ${u.active ? "ok" : "off"}">${u.active ? "مفعّل" : "موقوف"}</span></td>
+      <td><span class="badge ${u.active ? "ok" : "off"}">${u.active ? "مفعّل" : "موقوف"}</span>${u.pending ? ' <span class="badge wait">مستني أول دخول</span>' : ""}</td>
       <td>${access}</td>
       <td><div class="acts">
         <button class="btn ghost sm" data-act="edit" data-uid="${esc(u.uid)}"><i class="fa-solid fa-pen"></i> تعديل</button>
@@ -253,7 +259,7 @@ $("btnAddUser").onclick = () => modal("مستخدم جديد", `
     <div class="field"><label>الرقم الوظيفي</label><input name="empId" dir="ltr" required><small>حروف إنجليزي/أرقام فقط</small></div>
     <div class="field"><label>الدور</label><select name="role"><option value="user">مستخدم</option><option value="admin">مسؤول</option></select></div>
   </div>
-  <div class="field"><label>كلمة المرور</label><input name="pass" type="text" dir="ltr" minlength="6" required autocomplete="off"><small>6 على الأقل. ابعتها للموظف وهو يقدر يغيرها بعد الدخول.</small></div>
+  <div class="field"><label>كلمة المرور (اختياري)</label><input name="pass" type="text" dir="ltr" minlength="6" autocomplete="off"><small>سيبها فاضية والموظف هيكتب رقمه الوظيفي في صفحة الدخول ويختار كلمة المرور بنفسه أول مرة. أو اكتب كلمة مرور (6 على الأقل) وابعتهاله.</small></div>
   ${accessHtml(true, [])}`, {
   submitText: "إنشاء",
   onMount: wireAccess,
@@ -262,16 +268,20 @@ $("btnAddUser").onclick = () => modal("مستخدم جديد", `
     const id = normId(form.elements.empId.value);
     const pass = form.elements.pass.value;
     if (!validId(id)) throw { message: "الرقم الوظيفي لازم حروف إنجليزي/أرقام (2 إلى 32)، ويقدر يحتوي . _ -" };
-    if (pass.length < 6) throw { message: "كلمة المرور لازم 6 على الأقل." };
+    if (pass && pass.length < 6) throw { message: "كلمة المرور لازم 6 على الأقل (أو سيبها فاضية)." };
     if ((await getDoc(doc(db, "loginMap", id))).exists()) throw { message: "الرقم الوظيفي ده مستخدم قبل كده." };
-    const { uid, email } = await createAuthAccount(id, pass);
+    const pending = !pass;
+    const secret = pending ? randomKey() : pass;
+    const { uid, email } = await createAuthAccount(id, secret);
     const acc = readAccess(form);
     const batch = writeBatch(db);
     batch.set(doc(db, "users", uid), {
-      uid, employeeId: id, name, role: form.elements.role.value, active: true,
+      uid, employeeId: id, name, role: form.elements.role.value, active: true, pending,
       allTools: acc.allTools, toolIds: acc.toolIds, authEmail: email, createdAt: serverTimestamp(), createdBy: me.uid
     });
-    batch.set(doc(db, "loginMap", id), { email, uid });
+    batch.set(doc(db, "loginMap", id), {
+      email, uid, first: firstName(name), active: true, needsPassword: pending, ...(pending ? { initKey: secret } : {})
+    });
     await batch.commit();
     await loadUsers(); renderUsers();
     toast("تم إنشاء المستخدم");
@@ -304,11 +314,15 @@ $("usersBody").addEventListener("click", e => {
         const patch = { name, allTools: acc.allTools, toolIds: acc.toolIds };
         if (!you) { patch.role = form.elements.role.value; patch.active = form.elements.active.checked; }
         const batch = writeBatch(db);
+        const mapPatch = { first: firstName(name), active: you ? true : form.elements.active.checked };
         if (newId !== u.employeeId) {
           if ((await getDoc(doc(db, "loginMap", newId))).exists()) throw { message: "الرقم الوظيفي الجديد مستخدم قبل كده." };
+          const oldMap = (await getDoc(doc(db, "loginMap", u.employeeId))).data() || { email: u.authEmail, uid: u.uid };
           batch.delete(doc(db, "loginMap", u.employeeId));
-          batch.set(doc(db, "loginMap", newId), { email: u.authEmail, uid: u.uid });
+          batch.set(doc(db, "loginMap", newId), { ...oldMap, ...mapPatch });
           patch.employeeId = newId;
+        } else {
+          batch.set(doc(db, "loginMap", u.employeeId), mapPatch, { merge: true });
         }
         batch.update(doc(db, "users", u.uid), patch);
         await batch.commit();
@@ -319,23 +333,28 @@ $("usersBody").addEventListener("click", e => {
   }
 
   if (b.dataset.act === "pw") {
-    modal(`كلمة مرور جديدة — ${u.name}`, `
-      <p class="sub">الموظف هيدخل بالرقم الوظيفي <b class="mono">${esc(u.employeeId)}</b> وكلمة المرور الجديدة.</p>
-      <div class="field"><label>كلمة المرور الجديدة</label><input name="pass" type="text" dir="ltr" minlength="6" required autocomplete="off"></div>`, {
-      submitText: "تغيير",
+    modal(`تصفير كلمة المرور — ${u.name}`, `
+      <p class="sub">الرقم الوظيفي: <b class="mono">${esc(u.employeeId)}</b></p>
+      <div class="field"><label>كلمة المرور الجديدة (اختياري)</label><input name="pass" type="text" dir="ltr" minlength="6" autocomplete="off">
+        <small>سيبها فاضية = تصفير: الموظف يدخل برقمه الوظيفي ويختار كلمة مرور جديدة بنفسه. أو اكتب كلمة مرور (6 على الأقل) وابعتهاله.</small></div>`, {
+      submitText: "تصفير / تغيير",
       async onSubmit(form) {
         const pass = form.elements.pass.value;
-        if (pass.length < 6) throw { message: "كلمة المرور لازم 6 على الأقل." };
+        if (pass && pass.length < 6) throw { message: "كلمة المرور لازم 6 على الأقل (أو سيبها فاضية)." };
+        const pending = !pass;
+        const secret = pending ? randomKey() : pass;
         // Firebase مش بيسمح لأدمن من المتصفح يغيّر باسورد حد تاني،
         // فبنعمل حساب دخول جديد بالباسورد الجديد ونحوّل عليه نفس بيانات الموظف.
-        const { uid: newUid, email } = await createAuthAccount(u.employeeId, pass);
+        const { uid: newUid, email } = await createAuthAccount(u.employeeId, secret);
         const batch = writeBatch(db);
-        batch.set(doc(db, "users", newUid), { ...cleanUserData(u), uid: newUid, authEmail: email, passwordResetAt: serverTimestamp() });
+        batch.set(doc(db, "users", newUid), { ...cleanUserData(u), uid: newUid, authEmail: email, pending, passwordResetAt: serverTimestamp() });
         batch.delete(doc(db, "users", u.uid));
-        batch.set(doc(db, "loginMap", u.employeeId), { email, uid: newUid });
+        batch.set(doc(db, "loginMap", u.employeeId), {
+          email, uid: newUid, first: firstName(u.name), active: !!u.active, needsPassword: pending, ...(pending ? { initKey: secret } : {})
+        });
         await batch.commit();
         await loadUsers(); renderUsers();
-        toast("تم تغيير كلمة المرور");
+        toast(pending ? "تم التصفير، الموظف هيختار كلمة مرور جديدة عند الدخول" : "تم تغيير كلمة المرور");
       }
     });
   }
