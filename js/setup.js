@@ -35,9 +35,9 @@ $("form").addEventListener("submit", async e => {
     const batch = writeBatch(db);
     batch.set(doc(db, "users", uid), {
       uid, employeeId: id, name, role: "admin", active: true,
-      allTools: true, toolIds: [], authEmail: email, createdAt: serverTimestamp()
+      allTools: true, toolIds: [], pending: false, authEmail: email, createdAt: serverTimestamp()
     });
-    batch.set(doc(db, "loginMap", id), { email, uid });
+    batch.set(doc(db, "loginMap", id), { email, uid, first: name.split(/\s+/)[0], active: true, needsPassword: false });
     batch.set(doc(db, "meta", "setup"), { doneAt: serverTimestamp(), by: uid });
     await batch.commit();
     location.replace("dashboard.html");
