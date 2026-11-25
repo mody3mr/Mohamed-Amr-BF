@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل الدخول | بوابة أدوات FPs</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-head">
+        <i class="fa-solid fa-layer-group"></i>
+        <h1>بوابة أدوات FPs</h1>
+        <p>سجّل دخولك بالرقم الوظيفي</p>
+      </div>
+      <div class="auth-body">
+        <div id="notice" class="msg info hidden"></div>
+        <div id="error" class="msg err hidden"></div>
+        <form id="form" autocomplete="on">
+          <div class="field">
+            <label for="empId">الرقم الوظيفي</label>
+            <input id="empId" name="username" type="text" dir="ltr" inputmode="text" autocomplete="username" required autofocus>
+          </div>
+          <div class="field">
+            <label for="pass">كلمة المرور</label>
+            <input id="pass" name="password" type="password" dir="ltr" autocomplete="current-password" required>
+          </div>
+          <button id="btn" class="btn block" type="submit"><i class="fa-solid fa-right-to-bracket"></i> دخول</button>
+        </form>
+        <div class="foot">لو نسيت كلمة المرور كلّم مسؤول النظام.</div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="js/login.js"></script>
+</body>
+</html>

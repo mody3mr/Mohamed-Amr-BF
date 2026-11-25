@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>أداة | بوابة أدوات FPs</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="viewer">
+    <div class="topbar">
+      <a class="btn ghost sm" href="dashboard.html"><i class="fa-solid fa-arrow-right"></i> الرجوع للوحة</a>
+      <div class="brand"><i id="toolIcon" class="fa-solid fa-screwdriver-wrench"></i><span id="toolName">...</span></div>
+      <div class="sp"></div>
+    </div>
+    <div id="state" class="center-msg" style="flex:1;min-height:0">جاري التحميل...</div>
+    <iframe id="frame" class="hidden"
+      sandbox="allow-scripts allow-downloads allow-modals allow-forms allow-popups allow-popups-to-escape-sandbox"
+      title="tool"></iframe>
+  </div>
+  <script type="module" src="js/tool.js"></script>
+</body>
+</html>

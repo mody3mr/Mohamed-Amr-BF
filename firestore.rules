@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn()   { return request.auth != null; }
+    function profilePath(){ return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function hasProfile() { return signedIn() && exists(profilePath()); }
+    function me()         { return get(profilePath()).data; }
+    function isActive()   { return hasProfile() && me().active == true; }
+    function isAdmin()    { return isActive() && me().role == 'admin'; }
+    function setupOpen()  { return !exists(/databases/$(database)/documents/meta/setup); }
+
+    // خريطة الرقم الوظيفي -> الإيميل الداخلي (لازم تتقري قبل تسجيل الدخول)
+    // get مسموح، list ممنوع عشان محدش يسحب قايمة الموظفين.
+    match /loginMap/{empId} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update, delete: if isAdmin() || (signedIn() && setupOpen());
+    }
+
+    // حالة الإعداد الأول: بيتقفل بعد أول أدمن
+    match /meta/setup {
+      allow get: if true;
+      allow create: if signedIn() && setupOpen();
+      allow update, delete: if false;
+    }
+
+    // ملفات المستخدمين
+    match /users/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+                    || (signedIn() && request.auth.uid == uid && setupOpen()
+                        && request.resource.data.role == 'admin');
+      allow update, delete: if isAdmin();
+    }
+
+    // بيانات الأدوات (الاسم/الوصف/الأيقونة) - يشوفها أي مستخدم مفعّل
+    match /tools/{toolId} {
+      allow read: if isActive();
+      allow write: if isAdmin();
+    }
+
+    // كود الأدوات المخزّن في قاعدة البيانات - بس للأدمن أو اللي معاه صلاحية الأداة
+    match /toolCode/{toolId} {
+      allow get: if isAdmin()
+                 || (isActive() && (me().allTools == true || toolId in me().toolIds));
+      allow list: if false;
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

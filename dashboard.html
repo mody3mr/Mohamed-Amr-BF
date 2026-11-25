@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة التحكم | بوابة أدوات FPs</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="boot" class="center-msg">جاري التحميل...</div>
+
+  <div id="app" class="hidden">
+    <div class="topbar">
+      <div class="brand"><i class="fa-solid fa-layer-group"></i> بوابة أدوات FPs</div>
+      <div class="sp"></div>
+      <div class="who"><i class="fa-solid fa-circle-user"></i><span class="nm" id="whoName"></span><span class="badge" id="whoRole"></span></div>
+      <button class="btn ghost sm" id="btnPass"><i class="fa-solid fa-key"></i> كلمة المرور</button>
+      <button class="btn ghost sm" id="btnOut"><i class="fa-solid fa-right-from-bracket"></i> خروج</button>
+    </div>
+
+    <div class="container">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="tools"><i class="fa-solid fa-toolbox"></i> الأدوات</button>
+        <button class="tab adm hidden" data-tab="users"><i class="fa-solid fa-users"></i> المستخدمين</button>
+        <button class="tab adm hidden" data-tab="manage"><i class="fa-solid fa-screwdriver-wrench"></i> إدارة الأدوات</button>
+      </div>
+
+      <section id="tab-tools">
+        <h2>أدواتك</h2>
+        <p class="sub">اختار الأداة اللي عايز تفتحها.</p>
+        <div id="toolsGrid" class="grid"></div>
+      </section>
+
+      <section id="tab-users" class="hidden">
+        <div class="panel">
+          <div class="panel-head">
+            <div><h2>المستخدمين</h2><div class="sub" style="margin:0">إضافة وتعديل وإيقاف الحسابات</div></div>
+            <div class="sp"></div>
+            <button class="btn" id="btnAddUser"><i class="fa-solid fa-user-plus"></i> مستخدم جديد</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>الرقم الوظيفي</th><th>الاسم</th><th>الدور</th><th>الحالة</th><th>الأدوات</th><th>إجراءات</th></tr></thead>
+            <tbody id="usersBody"></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <section id="tab-manage" class="hidden">
+        <div class="panel">
+          <div class="panel-head">
+            <div><h2>إدارة الأدوات</h2><div class="sub" style="margin:0">أضف أداة جديدة أو عدّل أو امسح</div></div>
+            <div class="sp"></div>
+            <button class="btn" id="btnAddTool"><i class="fa-solid fa-plus"></i> أداة جديدة</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>الأداة</th><th>النوع</th><th>المصدر</th><th>إجراءات</th></tr></thead>
+            <tbody id="toolsBody"></tbody>
+          </table></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>
