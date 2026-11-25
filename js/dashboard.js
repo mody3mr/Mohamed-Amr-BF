@@ -90,7 +90,7 @@ function renderTools() {
   if (!mine.length) {
     grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
       ${isAdmin && !tools.length
-        ? `مفيش أدوات لسه.<br><br><button class="btn" id="btnSeed"><i class="fa-solid fa-wand-magic-sparkles"></i> إضافة أداة FPs الجاهزة</button>`
+        ? `مفيش أدوات لسه.<br><br><button class="btn" id="btnSeed"><i class="fa-solid fa-wand-magic-sparkles"></i> إضافة أدوات Odoo الجاهزة</button>`
         : "مفيش أدوات متاحة لحسابك دلوقتي. كلّم مسؤول النظام."}</div>`;
     const seed = $("btnSeed"); if (seed) seed.onclick = seedDefault;
     return;
@@ -103,8 +103,8 @@ function renderTools() {
 async function seedDefault() {
   const batch = writeBatch(db);
   batch.set(doc(db, "tools", "fps-tools"), {
-    name: "أدوات FPs (Pivot / ملاحظات / اوت بوت)",
-    description: "Pivot لشيت أودو، إضافة الملاحظات، وفحص الاوت من المندوب والمصنع.",
+    name: "أدوات Odoo",
+    description: "سحبة الأعداد لكل كاتيجري، إضافة الملاحظات، اوت بوت، واستخراج سحبة أعداد فروع جاهزة.",
     icon: "fa-solid fa-table-list", type: "file", path: "tools/fps-tools.html", createdAt: serverTimestamp()
   });
   await batch.commit();
