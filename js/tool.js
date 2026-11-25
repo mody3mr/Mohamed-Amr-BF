@@ -15,7 +15,7 @@ try {
   const tool = snap.data();
   if (!canSee(profile, id)) throw { message: "مفيش عندك صلاحية لفتح الأداة دي." };
 
-  document.title = tool.name + " | بوابة أدوات FPs";
+  document.title = tool.name + " | بوابة أدوات Odoo";
   $("toolName").textContent = tool.name;
   if (/^fa-[a-z]+ fa-[a-z0-9-]+$/.test(tool.icon || "")) $("toolIcon").className = tool.icon;
 
