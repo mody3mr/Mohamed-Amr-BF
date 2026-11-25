@@ -13,30 +13,42 @@
       <div class="auth-head">
         <i class="fa-solid fa-layer-group"></i>
         <h1>بوابة أدوات Odoo</h1>
-        <p>أدوات الأتمتة المتقدمة لمعالجة وتنسيق الشيتات</p>
+        <p>سجّل دخولك بالرقم الوظيفي</p>
       </div>
       <div class="auth-body">
         <div id="notice" class="msg info hidden"></div>
         <div id="error" class="msg err hidden"></div>
-        <form id="form" autocomplete="on">
-          <div class="login-box">
-            <div class="field">
-              <label for="empId">الرقم الوظيفي</label>
-              <div class="input-ico"><i class="fa-solid fa-id-badge"></i>
-                <input id="empId" name="username" type="text" dir="ltr" inputmode="text" autocomplete="username" required autofocus></div>
-            </div>
-            <div class="field" style="margin-bottom:0">
-              <label for="pass">كلمة المرور</label>
-              <div class="input-ico"><i class="fa-solid fa-lock"></i>
-                <input id="pass" name="password" type="password" dir="ltr" autocomplete="current-password" required></div>
-            </div>
+        <form id="form" autocomplete="off">
+          <div class="field">
+            <label for="empId">الرقم الوظيفي</label>
+            <input id="empId" name="username" type="text" dir="ltr" inputmode="text" autocomplete="username" required autofocus>
+            <div id="status" class="status"></div>
           </div>
-          <button id="btn" class="btn-main" type="submit"><i class="fa-solid fa-right-to-bracket"></i> تسجيل الدخول</button>
+          <div class="field">
+            <label for="pass" id="passLabel">كلمة المرور</label>
+            <input id="pass" name="password" type="password" dir="ltr" autocomplete="current-password" disabled required>
+          </div>
+          <div class="field hidden" id="confirmField">
+            <label for="pass2">تأكيد كلمة المرور</label>
+            <input id="pass2" type="password" dir="ltr" autocomplete="new-password" disabled>
+          </div>
+          <button id="btn" class="btn block" type="submit" disabled><i class="fa-solid fa-right-to-bracket"></i> <span id="btnText">دخول</span></button>
         </form>
-        <div class="foot">لو نسيت كلمة المرور كلّم مسؤول النظام.</div>
+        <div class="forgot">
+          <button type="button" id="btnForgot" class="link-btn"><i class="fa-solid fa-headset"></i> نسيت كلمة المرور؟</button>
+        </div>
       </div>
     </div>
-  <div class="credit"><a href="https://wa.me/201094264206" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> © 2026 تم الإنشاء بواسطة | محمد عمرو ابراهيم</a></div>
+  </div>
+
+  <!-- التواصل مع الإدارة لتصفير كلمة المرور -->
+  <div id="forgotModal" class="overlay hidden">
+    <div class="modal" style="max-width:380px;text-align:center">
+      <h3><i class="fa-solid fa-user-shield" style="color:var(--brand)"></i> التواصل مع الإدارة</h3>
+      <p class="sub">لإعادة تعيين كلمة المرور كلّم مدير النظام يصفّرها لك، وبعدها تدخل بالرقم الوظيفي وتختار كلمة مرور جديدة.</p>
+      <a id="waLink" class="btn wa block" href="#" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> تواصل عبر واتساب</a>
+      <button type="button" id="btnForgotClose" class="btn ghost block" style="margin-top:10px">إغلاق</button>
+    </div>
   </div>
   <script type="module" src="js/login.js"></script>
 </body>
