@@ -15,7 +15,14 @@ service cloud.firestore {
     match /loginMap/{empId} {
       allow get: if true;
       allow list: if false;
-      allow create, update, delete: if isAdmin() || (signedIn() && setupOpen());
+      allow create, delete: if isAdmin() || (signedIn() && setupOpen());
+      allow update: if isAdmin() || (signedIn() && setupOpen())
+                    // الموظف في أول دخول بيمسح المفتاح المؤقت بس
+                    || (signedIn() && resource.data.uid == request.auth.uid
+                        && resource.data.needsPassword == true
+                        && request.resource.data.needsPassword == false
+                        && !('initKey' in request.resource.data)
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['needsPassword', 'initKey']));
     }
 
     // حالة الإعداد الأول: بيتقفل بعد أول أدمن
@@ -32,7 +39,11 @@ service cloud.firestore {
       allow create: if isAdmin()
                     || (signedIn() && request.auth.uid == uid && setupOpen()
                         && request.resource.data.role == 'admin');
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin()
+                    // الموظف يقدر يغيّر علامة pending بتاعته بس (بعد ما يختار كلمة المرور)
+                    || (signedIn() && request.auth.uid == uid
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pending']));
+      allow delete: if isAdmin();
     }
 
     // بيانات الأدوات (الاسم/الوصف/الأيقونة) - يشوفها أي مستخدم مفعّل
