@@ -71,6 +71,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // قائمة أسعار المنتجات (أدوات حساب الأسعار): الكل يقرا (لو مفيش صيانة)، الأدمن بس يكتب
+    match /prices/{docId} {
+      allow read: if isAdmin() || (isActive() && !maintenanceOn());
+      allow write: if isAdmin();
+    }
+
     match /{document=**} { allow read, write: if false; }
   }
 }
