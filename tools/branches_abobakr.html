@@ -4,14 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>سحبة أعداد فروع جاهزة | Odoo</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    /* الوضع الداكن/الفاتح: بيتحدد من البوابة (hash أو رسالة) أو من إعدادات الجهاز */
+    (function(){
+        function set(d){document.documentElement.classList.toggle('dark',!!d)}
+        var h=(location.hash||'').replace('#','');
+        if(h==='dark')set(true);else if(h==='light')set(false);else{try{set(matchMedia('(prefers-color-scheme: dark)').matches)}catch(e){}}
+        window.addEventListener('message',function(e){var d=e.data;if(d&&d.type==='theme')set(d.dark)});
+    })();
+    </script>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <link rel="stylesheet" href="../css/tools.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
         body { font-family: 'Tajawal', sans-serif; }
     </style>
+    <script>
+    /* مكتبات الإكسيل (حوالي 2MB) بتتحمّل في الخلفية بعد ما الصفحة تظهر، مش قبلها */
+    (function(){
+        var SRC={xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',exceljs:'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js'};
+        function load(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){rej(new Error('تعذر تحميل مكتبة معالجة الإكسيل. اتأكد من الإنترنت وجرب تاني.'))};document.head.appendChild(s)})}
+        var p=null;
+        window.ensureLibs=function(){
+            if(!p)p=Promise.all([window.XLSX?0:load(SRC.xlsx),window.ExcelJS?0:load(SRC.exceljs)]).then(function(){},function(e){p=null;throw e});
+            return p;
+        };
+        window.addEventListener('load',function(){setTimeout(function(){window.ensureLibs().catch(function(){})},600)});
+    })();
+    </script>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-6">
 
@@ -24,7 +48,7 @@
 
     <div class="p-8">
         <div class="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-5 mb-6 text-sm text-slate-600 leading-7">
-            الاداة ديه بقا انا عاملها مخصوصة لابو بكر صديقي العزيز الشاعر صاحب اكبر قناة يوتيوب للتحدث عن الاحاديث الدينية والاداة ديه حباً له وتسهيلاً له في الشغل واحلي مسا علي فخادك يا غالي 😂😂❤️💋.
+            الاداة ديه بقا انا عاملها مخصوصة لابو بكر صديقي العزيز الشاعر صاحب اكبر قناة يوتيوب للتحدث عن الاحاديث الدينية والاداة ديه حبه له وتسهيل له في الشغل واحلي مسا علي فخادك يا غالي 😂😂❤️💋.
         </div>
 
         <div class="mb-6 border border-slate-200 rounded-2xl p-5">
@@ -316,7 +340,13 @@ function resetTool() {
     dropZone.style.display = ''; fileInput.value = ''; finalBlob = null;
 }
 
-function processFile(file) {
+async function processFile(file) {
+    $('dropContent').classList.add('hidden');
+    $('loading').classList.remove('hidden');
+    try { await ensureLibs(); } catch (e) { return showError(e.message); }
+    processFileNow(file);
+}
+function processFileNow(file) {
     $('dropContent').classList.add('hidden');
     $('loading').classList.remove('hidden');
     const reader = new FileReader();
