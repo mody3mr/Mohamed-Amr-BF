@@ -4,33 +4,49 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>الإعداد الأول | بوابة أدوات Odoo</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t!=='dark'&&t!=='light')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t}catch(e){}})()</script>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js">
+  <link rel="modulepreload" href="js/firebase.js">
+  <link rel="modulepreload" href="js/common.js">
+  <link rel="modulepreload" href="js/setup.js">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="auth-wrap">
-    <div class="auth-card">
-      <div class="auth-head">
-        <i class="fa-solid fa-user-shield"></i>
-        <h1>الإعداد الأول</h1>
-        <p>إنشاء حساب الأدمن (مرة واحدة فقط)</p>
-      </div>
-      <div class="auth-body">
-        <div id="locked" class="hidden">
-          <div class="msg okm">الإعداد اتعمل قبل كده، والصفحة دي اتقفلت.</div>
-          <a class="btn block" href="index.html">الذهاب لتسجيل الدخول</a>
+  <div class="page">
+    <button class="btn ghost sm icon theme-fab" id="btnTheme" type="button"></button>
+    <div class="auth-wrap">
+      <div class="auth-card">
+        <div class="auth-head">
+          <i class="fa-solid fa-user-shield"></i>
+          <h1>الإعداد الأول</h1>
+          <p>إنشاء حساب الأدمن (مرة واحدة فقط)</p>
         </div>
-        <div id="error" class="msg err hidden"></div>
-        <form id="form" class="hidden">
-          <div class="field"><label>الاسم</label><input id="name" required></div>
-          <div class="field"><label>الرقم الوظيفي</label><input id="empId" dir="ltr" required><small>حروف إنجليزي أو أرقام فقط (2 إلى 32).</small></div>
-          <div class="field"><label>كلمة المرور</label><input id="pass" type="password" dir="ltr" minlength="6" required></div>
-          <div class="field"><label>تأكيد كلمة المرور</label><input id="pass2" type="password" dir="ltr" minlength="6" required></div>
-          <button id="btn" class="btn block" type="submit"><i class="fa-solid fa-check"></i> إنشاء الأدمن</button>
-        </form>
-        <div id="loading" class="center-msg" style="min-height:120px">جاري التحقق...</div>
+        <div class="auth-body">
+          <div id="locked" class="hidden">
+            <div class="msg okm">الإعداد اتعمل قبل كده، والصفحة دي اتقفلت.</div>
+            <a class="btn block" href="index.html">الذهاب لتسجيل الدخول</a>
+          </div>
+          <div id="error" class="msg err hidden"></div>
+          <form id="form" class="hidden">
+            <div class="field"><label>الاسم</label><input id="name" required></div>
+            <div class="field"><label>الرقم الوظيفي</label><input id="empId" dir="ltr" required><small>حروف إنجليزي أو أرقام فقط (2 إلى 32).</small></div>
+            <div class="field"><label>كلمة المرور</label><input id="pass" type="password" dir="ltr" minlength="6" required></div>
+            <div class="field"><label>تأكيد كلمة المرور</label><input id="pass2" type="password" dir="ltr" minlength="6" required></div>
+            <button id="btn" class="btn block" type="submit"><i class="fa-solid fa-check"></i> إنشاء الأدمن</button>
+          </form>
+          <div id="loading" class="center-msg" style="min-height:120px">جاري التحقق...</div>
+        </div>
       </div>
     </div>
+    <footer class="site-foot"><a class="credit-link" href="https://wa.me/201094264206" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> © 2026 تم الإنشاء بواسطة | محمد عمرو ابراهيم</a></footer>
   </div>
   <script type="module" src="js/setup.js"></script>
 </body>
