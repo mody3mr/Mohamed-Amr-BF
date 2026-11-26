@@ -4,6 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>أداة | بوابة أدوات Odoo</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t!=='dark'&&t!=='light')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t}catch(e){}})()</script>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js">
+  <link rel="modulepreload" href="js/firebase.js">
+  <link rel="modulepreload" href="js/common.js">
+  <link rel="modulepreload" href="js/tool.js">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -13,6 +25,7 @@
       <a class="btn ghost sm" href="dashboard.html"><i class="fa-solid fa-arrow-right"></i> الرجوع للوحة</a>
       <div class="brand"><i id="toolIcon" class="fa-solid fa-screwdriver-wrench"></i><span id="toolName">...</span></div>
       <div class="sp"></div>
+      <button class="btn ghost sm icon" id="btnTheme" type="button"></button>
     </div>
     <div id="state" class="center-msg" style="flex:1;min-height:0">جاري التحميل...</div>
     <iframe id="frame" class="hidden"
