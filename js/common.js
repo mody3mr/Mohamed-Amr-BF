@@ -64,7 +64,7 @@ export function initThemeButton(btn) {
 // بنجبر المتصفح يجيب نسخة جديدة من كل الملفات وبعدين يعمل ريفريش مرة واحدة.
 const CORE_ASSETS = [
   "index.html", "dashboard.html", "tool.html", "setup.html", "css/style.css",
-  "js/common.js", "js/firebase.js", "js/firebase-config.js", "js/login.js", "js/dashboard.js", "js/tool.js", "js/setup.js"
+  "js/common.js", "js/prices-core.js", "js/prices-admin.js", "js/firebase.js", "js/firebase-config.js", "js/login.js", "js/dashboard.js", "js/tool.js", "js/setup.js"
 ];
 async function refreshAssets() {
   const list = new Set(CORE_ASSETS);
