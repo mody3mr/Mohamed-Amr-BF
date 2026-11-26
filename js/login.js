@@ -1,10 +1,11 @@
 import { auth, db } from "./firebase.js";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, getDoc, updateDoc, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { normId, validId, arErr, esc } from "./common.js";
+import { normId, validId, arErr, esc, initThemeButton } from "./common.js";
 
 // رقم واتساب مدير النظام (للتواصل لما حد ينسى كلمة المرور)
 const ADMIN_WHATSAPP = "201094264296";
+initThemeButton(document.getElementById("btnTheme"));
 
 const $ = id => document.getElementById(id);
 const showErr = m => { $("error").textContent = m; $("error").classList.remove("hidden"); };
@@ -25,10 +26,14 @@ function lockForm() {
   $("btn").disabled = true;
 }
 
+function notice(msg) { $("notice").textContent = msg; $("notice").classList.remove("hidden"); }
 if (new URLSearchParams(location.search).get("reason") === "disabled") {
-  $("notice").textContent = "الحساب ده متوقف أو مش موجود. كلّم مسؤول النظام.";
-  $("notice").classList.remove("hidden");
+  notice("الحساب ده محظور أو مش موجود. كلّم مسؤول النظام.");
 }
+// لو الموقع في وضع الصيانة نقول للمستخدم من الأول (الأدمن بيدخل عادي)
+getDoc(doc(db, "meta", "site")).then(s => {
+  if (s.exists() && s.data().maintenance === true) notice("الموقع تحت الصيانة دلوقتي. الدخول متاح للمسؤولين بس.");
+}).catch(() => {});
 
 $("waLink").href = "https://wa.me/" + ADMIN_WHATSAPP;
 $("btnForgot").onclick = () => $("forgotModal").classList.remove("hidden");
@@ -51,7 +56,7 @@ $("empId").addEventListener("input", () => {
   const v = normId($("empId").value);
   if (!v) return setStatus("");
   setStatus('<i class="fa-solid fa-circle-notch fa-spin"></i> جاري التحقق...');
-  timer = setTimeout(() => checkId(v), 500);
+  timer = setTimeout(() => checkId(v), 350);
 });
 
 async function checkId(id) {
@@ -61,7 +66,7 @@ async function checkId(id) {
     if (normId($("empId").value) !== id) return;       // الرقم اتغير أثناء الفحص
     if (!snap.exists()) return setStatus('<i class="fa-solid fa-circle-xmark"></i> الرقم الوظيفي غير مسجل في النظام', "bad");
     const d = snap.data();
-    if (d.active === false) return setStatus('<i class="fa-solid fa-ban"></i> تم إيقاف هذا الحساب من الإدارة', "bad");
+    if (d.active === false) return setStatus('<i class="fa-solid fa-ban"></i> تم حظر هذا الحساب من الإدارة', "bad");
 
     current = { id, data: d };
     const name = d.first ? esc(d.first) : "";
@@ -114,18 +119,16 @@ $("form").addEventListener("submit", async e => {
         } else throw ex;
       }
       try {
-        await updateDoc(doc(db, "loginMap", id), { needsPassword: false, initKey: deleteField() });
-        await updateDoc(doc(db, "users", cred.user.uid), { pending: false });
+        await Promise.all([
+          updateDoc(doc(db, "loginMap", id), { needsPassword: false, initKey: deleteField() }),
+          updateDoc(doc(db, "users", cred.user.uid), { pending: false })
+        ]);
       } catch (_) { /* مش مشكلة، هتتظبط في الدخول الجاي */ }
     } else {
       cred = await signInWithEmailAndPassword(auth, d.email, pass);
     }
 
-    const snap = await getDoc(doc(db, "users", cred.user.uid));
-    if (!snap.exists() || snap.data().active !== true) {
-      await signOut(auth);
-      throw { message: "الحساب ده متوقف. كلّم مسؤول النظام." };
-    }
+    // مفيش قراءة إضافية هنا: لوحة التحكم بتتأكد من الحساب (وبتطرد المحظور) أول ما تفتح.
     location.replace("dashboard.html");
   } catch (err) {
     const wrong = err && (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password");
