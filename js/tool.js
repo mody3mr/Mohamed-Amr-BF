@@ -1,6 +1,7 @@
 import { db } from "./firebase.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { guard, canSee, esc, arErr, initThemeButton, getTheme } from "./common.js";
+import { unpackText } from "./prices-core.js";
 
 const $ = id => document.getElementById(id);
 const fail = m => { $("frame").classList.add("hidden"); $("state").classList.remove("hidden"); $("state").innerHTML = '<div class="msg err">' + esc(m) + '</div>'; };
@@ -20,6 +21,32 @@ function applyTheme() {
 }
 document.addEventListener("themechange", applyTheme);
 frame.addEventListener("load", applyTheme);
+
+// جسر قائمة الأسعار: أي أداة ممكن تطلب الأسعار برسالة {type:"need-prices"}.
+// بنقراها من Firestore (من الكاش الأول)، وبنفكّها، وبنبعتها للأداة، وبنبعتها تاني لو الأدمن حدّثها.
+let priceUnsub = null, latestPrices = null, lastPriceKey = null;
+function postPrices() { if (latestPrices) try { frame.contentWindow.postMessage(latestPrices, "*"); } catch (_) {} }
+function startPrices() {
+  if (priceUnsub) return postPrices();
+  priceUnsub = onSnapshot(collection(db, "prices"), async snap => {
+    const docs = {}; snap.docs.forEach(d => { docs[d.id] = d.data(); });
+    const meta = docs.meta;
+    if (!meta) { latestPrices = { type: "prices", empty: true }; return postPrices(); }
+    const key = meta.version + "|" + ((docs.ov && docs.ov.v) || "");
+    if (key === lastPriceKey) return;
+    const chunks = [];
+    for (let i = 0; i < meta.chunks; i++) { if (!docs["b" + i]) return; chunks.push(docs["b" + i].data); }   // لسه كل القطع ما وصلتش
+    try {
+      const base = await unpackText(chunks);
+      lastPriceKey = key;
+      latestPrices = { type: "prices", version: meta.version, count: meta.count, updatedAt: meta.updatedAtMs || 0, source: meta.source || "", base, ov: (docs.ov && docs.ov.text) || "" };
+    } catch (e) { latestPrices = { type: "prices", error: true }; }
+    postPrices();
+  }, () => { latestPrices = { type: "prices", error: true }; postPrices(); });
+}
+window.addEventListener("message", e => {
+  if (e.source === frame.contentWindow && e.data && e.data.type === "need-prices") startPrices();
+});
 
 // لو صلاحية الأداة اتشالت منك وانت فاتحها
 api.onProfile(p => { if (tool && !canSee(p, id)) location.replace("dashboard.html"); });
