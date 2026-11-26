@@ -1,6 +1,6 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export const EMAIL_DOMAIN = "fps-portal.app";
 
@@ -29,7 +29,7 @@ export function arErr(e) {
     "auth/weak-password": "كلمة المرور ضعيفة، لازم 6 حروف أو أرقام على الأقل.",
     "auth/requires-recent-login": "سجّل خروج وادخل تاني وبعدين جرب.",
     "auth/operation-not-allowed": "تسجيل الدخول بالإيميل/الباسورد مش مفعّل في Firebase (Authentication > Sign-in method).",
-    "permission-denied": "مفيش صلاحية للعملية دي (راجع قواعد Firestore).",
+    "permission-denied": "مفيش صلاحية للعملية دي (راجع قواعد Firestore، وغالبًا لازم تنشرها من جديد).",
     "unavailable": "السيرفر مش متاح دلوقتي، حاول تاني."
   };
   return map[code] || ("حصل خطأ: " + (e && e.message ? e.message : code || "غير معروف"));
@@ -45,31 +45,114 @@ export function toast(msg, kind = "ok") {
   setTimeout(() => t.remove(), 4200);
 }
 
-// بتحمي الصفحة: لازم يكون فيه مستخدم داخل وحسابه مفعّل.
+/* ------------------------------------------------------------------ الوضع الداكن / الفاتح */
+export function getTheme() { return document.documentElement.dataset.theme === "dark" ? "dark" : "light"; }
+export function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("theme", t); } catch (_) {}
+  document.dispatchEvent(new CustomEvent("themechange", { detail: t }));
+}
+export function initThemeButton(btn) {
+  if (!btn) return;
+  const paint = () => { btn.innerHTML = getTheme() === "dark" ? '<i class="fa-solid fa-sun"></i>' : '<i class="fa-solid fa-moon"></i>'; btn.title = getTheme() === "dark" ? "الوضع الفاتح" : "الوضع الداكن"; };
+  btn.addEventListener("click", () => { setTheme(getTheme() === "dark" ? "light" : "dark"); paint(); });
+  paint();
+}
+
+/* ------------------------------------------------------------------ تحديث الملفات من غير انتظار كاش GitHub */
+// GitHub Pages بيخلّي المتصفح يحتفظ بالملفات 10 دقايق. لما الأدمن يضغط "تحديث الملفات للجميع"
+// بنجبر المتصفح يجيب نسخة جديدة من كل الملفات وبعدين يعمل ريفريش مرة واحدة.
+const CORE_ASSETS = [
+  "index.html", "dashboard.html", "tool.html", "setup.html", "css/style.css",
+  "js/common.js", "js/firebase.js", "js/firebase-config.js", "js/login.js", "js/dashboard.js", "js/tool.js", "js/setup.js"
+];
+async function refreshAssets() {
+  const list = new Set(CORE_ASSETS);
+  try {
+    const snap = await getDocs(collection(db, "tools"));
+    snap.docs.forEach(d => { const t = d.data(); if (t.type === "file" && t.path) list.add(t.path); });
+  } catch (_) {}
+  list.add("css/tools.css");
+  await Promise.allSettled([...list].map(p => fetch(p, { cache: "reload" })));
+}
+async function checkVersion(v) {
+  if (!v) return;
+  let seen = null;
+  try { seen = localStorage.getItem("assetsVersion"); } catch (_) {}
+  if (seen === v) return;
+  try { localStorage.setItem("assetsVersion", v); } catch (_) {}
+  if (seen === null) return;                 // أول زيارة: الملفات أصلًا جديدة
+  await refreshAssets();
+  location.reload();
+}
+
+/* ------------------------------------------------------------------ شاشة الصيانة */
+function showMaintenance(message) {
+  document.body.innerHTML = `<div class="maint-screen"><div class="maint-card">
+    <i class="fa-solid fa-screwdriver-wrench big"></i>
+    <h2>الموقع تحت الصيانة</h2>
+    <p>${esc(message || "بنعمل شوية تحديثات دلوقتي، ارجع كمان شوية.")}</p>
+    <button class="btn ghost" id="maintOut"><i class="fa-solid fa-right-from-bracket"></i> تسجيل خروج</button>
+  </div></div>`;
+  document.getElementById("maintOut").onclick = logout;
+}
+
+/* ------------------------------------------------------------------ حماية الصفحات (لحظية) */
+// بتسمع لحسابك ولإعدادات الموقع لحظيًا: لو اتحظرت أو الموقع اتقفل بتتنفّذ على طول من غير ما تعمل ريفريش.
 export function guard({ admin = false } = {}) {
   return new Promise(resolve => {
-    const off = onAuthStateChanged(auth, async user => {
+    const off = onAuthStateChanged(auth, user => {
       off();
       if (!user) return location.replace("index.html");
-      try {
-        const snap = await getDoc(doc(db, "users", user.uid));
-        if (!snap.exists() || snap.data().active !== true) {
-          await signOut(auth);
-          return location.replace("index.html?reason=disabled");
+
+      let profile = null, site = null, done = false, first = null;
+      const api = {
+        user,
+        get profile() { return profile; },
+        get site() { return site || {}; },
+        _p: new Set(), _s: new Set(),
+        onProfile(cb) { this._p.add(cb); },
+        onSite(cb) { this._s.add(cb); }
+      };
+
+      const evaluate = () => {
+        if (profile === null || site === null) return;
+        if (!profile.exists || profile.active !== true) {
+          signOut(auth).finally(() => location.replace("index.html?reason=disabled"));
+          return;
         }
-        const profile = { uid: user.uid, ...snap.data() };
         if (admin && profile.role !== "admin") return location.replace("dashboard.html");
-        resolve({ user, profile });
-      } catch (e) {
-        console.error(e);
-        document.body.innerHTML = '<div class="center-msg">تعذر تحميل الحساب: ' + esc(arErr(e)) + '</div>';
-      }
+        if (site.maintenance === true && profile.role !== "admin") return showMaintenance(site.message);
+        if (!done) {
+          done = true; first = { role: profile.role };
+          resolve(api);
+        } else if (profile.role !== first.role) {
+          location.reload();
+        }
+      };
+
+      onSnapshot(doc(db, "users", user.uid), snap => {
+        const was = profile;
+        profile = snap.exists() ? { exists: true, uid: user.uid, ...snap.data() } : { exists: false };
+        evaluate();
+        if (done && was) api._p.forEach(cb => cb(profile));
+      }, err => { console.error(err); document.body.innerHTML = '<div class="center-msg">تعذر تحميل الحساب: ' + esc(arErr(err)) + '</div>'; });
+
+      onSnapshot(doc(db, "meta", "site"), snap => {
+        const wasMaint = site && site.maintenance === true;
+        site = snap.exists() ? snap.data() : {};
+        // الصيانة خلصت: المستخدم العادي يرجع للموقع (الأدمن هو اللي قافلها فمحتاجش ريفريش)
+        if (wasMaint && site.maintenance !== true && !(profile && profile.role === "admin")) return location.reload();
+        evaluate();
+        checkVersion(site.version);
+        if (done) api._s.forEach(cb => cb(site));
+      }, err => { console.error(err); site = {}; evaluate(); });
     });
   });
 }
 
 export async function logout() {
-  await signOut(auth);
+  try { await signOut(auth); } catch (_) {}
   location.replace("index.html");
 }
 
