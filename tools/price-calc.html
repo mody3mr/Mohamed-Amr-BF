@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أداة حساب الأسعار | Odoo</title>
+    <script>
+    /* الوضع الداكن/الفاتح: بيتحدد من البوابة (hash أو رسالة) أو من إعدادات الجهاز */
+    (function(){
+        function set(d){document.documentElement.classList.toggle('dark',!!d)}
+        var h=(location.hash||'').replace('#','');
+        if(h==='dark')set(true);else if(h==='light')set(false);else{try{set(matchMedia('(prefers-color-scheme: dark)').matches)}catch(e){}}
+        window.addEventListener('message',function(e){var d=e.data;if(d&&d.type==='theme')set(d.dark)});
+    })();
+    </script>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../css/tools.css">
+    <style>
+        body { font-family: 'Tajawal', sans-serif; }
+    </style>
+    <script>
+    /* مكتبات الإكسيل (حوالي 2MB) بتتحمّل في الخلفية بعد ما الصفحة تظهر، مش قبلها */
+    (function(){
+        var SRC={xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',exceljs:'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js'};
+        function load(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){rej(new Error('تعذر تحميل مكتبة معالجة الإكسيل. اتأكد من الإنترنت وجرب تاني.'))};document.head.appendChild(s)})}
+        var p=null;
+        window.ensureLibs=function(){
+            if(!p)p=Promise.all([window.XLSX?0:load(SRC.xlsx),window.ExcelJS?0:load(SRC.exceljs)]).then(function(){},function(e){p=null;throw e});
+            return p;
+        };
+        window.addEventListener('load',function(){setTimeout(function(){window.ensureLibs().catch(function(){})},600)});
+    })();
+    </script>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-6 relative">
+
+    <div class="max-w-2xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 z-10">
+
+        <!-- الهيدر الموحد -->
+        <div class="bg-indigo-600 p-8 text-center relative overflow-hidden">
+            <div class="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+            <div class="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-black/10 rounded-full blur-2xl"></div>
+            <i class="fa-solid fa-calculator text-5xl text-white mb-4 shadow-sm"></i>
+            <h1 class="text-3xl font-bold text-white tracking-wide">أداة حساب الأسعار</h1>
+            <p class="text-indigo-200 mt-2 text-sm">عدد القطع وإجمالي السعر لكل فرع من سحبة الأودو</p>
+        </div>
+
+        <div class="p-8">
+
+            <div class="mb-6 bg-indigo-50/60 p-5 rounded-2xl border border-indigo-100 text-sm text-slate-700 leading-7">
+                <p class="font-bold text-indigo-900"><i class="fa-solid fa-circle-info ml-1 text-indigo-500"></i> الأداة دي بتعمل إيه؟</p>
+                <p class="mt-1">بتديك اسم كل فرع وعنده كام قطعة وإجمالي سعرها كام. ارفع سحبة الأودو الخام وهينزلك شيت <b>extiract</b> جاهز بنفس الترتيب والتنسيق، من غير ما تفتح جوجل شيت.</p>
+            </div>
+
+            <!-- حالة قائمة الأسعار -->
+            <div id="priceStatus" class="mb-5 flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-600">
+                <i id="priceIcon" class="fa-solid fa-circle-notch fa-spin text-indigo-500 mt-1"></i>
+                <div class="flex-1">
+                    <p id="priceText" class="font-bold text-slate-700">جاري تحميل قائمة الأسعار...</p>
+                    <p class="mt-1 text-xs text-slate-500">لو محتاج تجرب بقائمة أسعار مختلفة لمرة واحدة، <button type="button" id="btnOwnPrices" class="text-indigo-600 font-bold underline">ارفع ملف أسعار (CSV أو Excel)</button></p>
+                    <input type="file" id="fileInputPrices" accept=".csv,.xlsx,.xls" class="hidden">
+                </div>
+            </div>
+
+            <div id="dropZoneContainerPrice" class="border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/50 p-10 text-center transition-all hover:bg-indigo-50 hover:border-indigo-400 cursor-pointer flex flex-col items-center justify-center group">
+                <div id="dropZoneContentPrice">
+                    <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-500 mb-3 group-hover:scale-110 transition-transform mx-auto">
+                        <i class="fa-solid fa-file-circle-plus text-2xl"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-700">اضغط هنا لرفع شيت أودو الخام</h3>
+                    <p class="text-sm text-slate-500 mt-1">أو اسحب وأفلت الشيت هنا</p>
+                </div>
+                <div id="loadingStatePrice" class="hidden text-indigo-500">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-3"></i>
+                    <p class="font-bold">جاري حساب الأسعار...</p>
+                </div>
+            </div>
+
+            <input type="file" id="fileInputPrice" accept=".xlsx, .xls, .csv" class="hidden">
+
+            <div id="errorStatePrice" class="hidden mt-6 text-center bg-rose-50 border border-rose-200 p-6 rounded-2xl">
+                <i class="fa-solid fa-triangle-exclamation text-4xl text-rose-500 mb-3"></i>
+                <h4 class="text-lg font-bold text-slate-800">يوجد مشكلة!</h4>
+                <p id="errorMsgPrice" class="text-sm text-rose-600 mt-2 font-medium"></p>
+                <button onclick="resetPrice()" class="mt-4 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 px-6 py-2 rounded-lg font-bold transition-all text-sm">
+                    حاول مرة أخرى
+                </button>
+            </div>
+
+            <div id="successStatePrice" class="hidden mt-6 text-center">
+                <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-3">
+                    <i class="fa-solid fa-check-double"></i>
+                </div>
+                <h4 class="text-lg font-bold text-slate-800">الشيت جاهز!</h4>
+                <p id="successDetailsPrice" class="text-xs text-emerald-600 mt-1 font-medium bg-emerald-50 inline-block px-3 py-1 rounded-full border border-emerald-100 leading-6"></p>
+                <div id="warnBox" class="hidden mt-4 text-right bg-amber-50 border border-amber-200 text-amber-700 rounded-2xl p-4 text-sm leading-7"></div>
+                <button onclick="downloadPrice()" class="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 mx-auto">
+                    <i class="fa-solid fa-download"></i> تحميل شيت extiract
+                </button>
+                <button onclick="resetPrice()" class="mt-3 text-sm text-slate-500 hover:text-indigo-600 font-bold">رفع ملف تاني</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- حقوق الملكية المحمية -->
+    <div class="mt-8 text-center z-10 w-full opacity-90 hover:opacity-100 transition-opacity">
+        <a id="_waAuth" href="https://wa.me/201094264206" target="_blank" class="inline-flex items-center justify-center gap-2 text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors duration-300 bg-white/60 px-5 py-2.5 rounded-full border border-slate-200 shadow-sm">
+            <i class="fa-brands fa-whatsapp text-lg text-emerald-500"></i>
+            © 2026 تم الإنشاء بواسطة | محمد عمرو ابراهيم
+        </a>
+    </div>
+
+    <script>
+        // ==========================================
+        // نظام الحماية الآلي لحقوق المطور
+        // ==========================================
+        function _verifyIntegrity() {
+            try {
+                var el = document.getElementById('_waAuth');
+                if(!el) return false;
+                if(!el.href.includes('201094264206')) return false;
+                var txt = el.textContent || el.innerText;
+                if(!txt.includes('محمد') || !txt.includes('عمرو')) return false;
+                return true;
+            } catch(e) { return false; }
+        }
+        function triggerAntiTamper() {
+            document.body.innerHTML = `
+            <div class="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center w-full">
+                <i class="fa-solid fa-shield-halved text-7xl text-rose-500 mb-6 drop-shadow-lg"></i>
+                <h1 class="text-4xl font-bold text-white mb-3">تم إيقاف النظام</h1>
+                <p class="text-slate-400 text-lg max-w-md">عفواً، تم اكتشاف تلاعب بحقوق الملكية الفكرية الخاصة بالمطور. يرجى استعادة الحقوق ليعمل النظام مجدداً.</p>
+            </div>`;
+        }
+    </script>
+
+    <script>
+        // ==========================================
+        // بيانات الفروع (نفس ترتيب شيت extiract) وأسماء الربط
+        // ==========================================
+        const BRANCHES = ["Breadfast Coffee - Chillout El Rehab", "Breadfast Coffee - Webhelp Office", "Breadfast Coffee - Schneider Office", "Breadfast Coffee - Smart Village", "Giza Patuea", "Breadfast Coffee - New Giza", "Breadfast Coffee - Almaza", "BreadFast Coffee - City Stars ", "Breadfast Coffee - Al burouj ", "Breadfast Coffee - New Cairo Drive Thru", "Breadfast Coffee - Narges Promenade", "Breadfast Coffee - TOTAL Golden Square Drive-thru", "Breadfast Coffee - Fuel Up", "Breadfast Coffee - Total Zayed", "Breadfast Coffee - Mall of Egypt", "Breadfast Coffee - City Center Maadi", "Breadfast Coffee - Campous", "Breadfast Coffee - Maadi 233", "Breadfast Coffee - Etisalat", "Breadfast Coffee - Ahli United Bank Egypt", "Breadfast Coffee - Ryze Club ", "Breadfast Coffee - AIB Office ", "Breadfast Coffee - P&G", "ENBD", "Breadfast Coffee - Pepsico", "Breadfast Coffee - ADNOC Shorouk", "Breadfast Coffee - BUE", "Breadfast Coffee - Korba", "Breadfast Coffee - Cairo Bank", "Breadfast Coffee - Alex Bank office", "Breadfast Coffee - Giza system", "Auc", "Mountain view", "Breadfast Coffee - TOTAL Alex Gates Drive Thru", "City centre Alex", "Breadfast Coffee - Green Plaza Alexandria", "Breadfast Coffee - Hillburton", "Breadfast Coffee - Mashreq Bank", "Mindhaus", "Breadfast Coffee -poly park", "Breadfast Coffee - Mall Of Arabia", "Breadfast Coffee - Madinaty Strip Zone Drive Thur", "Breadfast Coffee -East hub madinty", "Breadfast Coffee - Madinaty", "Breadfast Coffee - B.Tech ", "Breadfast Coffee - Smash Club", "Breadfast Coffee - Family Park"];
+        const BRANCH_ALIASES = {
+            'webhelpoffice': 'webhelpoffice', 'schneideroffice': 'schneiderelectric', 'gizapatuea': 'gizaplateau',
+            'campous': 'campus', 'nargespromenade': 'nargespromenada', 'enbd': 'enbd', 'gizasystem': 'gizasystems',
+            'auc': 'auc', 'citycentrealex': 'citycenteralexandria', 'hillburton': 'halliburton', 'polypark': 'polyparkplaza',
+            'madinatystripzonedrivethru': 'madinatystripzone', 'easthubmadinty': 'madinatyeasthub',
+            'madinaty': 'openairmallmadinaty', 'totalzayed': 'totalzayed', 'fuelup': 'fuelupzayed'
+        };
+
+        // ==========================================
+        // منطق الحساب (نسخة طبق الأصل من كود Apps Script)
+        // ==========================================
+        function priceNorm(text) {
+            return String(text || '').toLowerCase().replace(/\u00A0/g, ' ').replace(/[–—]/g, '-')
+                .replace(/\s*-\s*/g, ' - ').replace(/\s+/g, ' ').trim();
+        }
+        function cleanBranchKey(name) {
+            return String(name || '').toLowerCase()
+                .replace(/^[a-z0-9]+\//i, '')
+                .replace(/breadfast\s*coffee/gi, '')
+                .replace(/internal\s*order\s*transit\s*location/gi, '')
+                .replace(/drive[\s-]*thr?u|drive[\s-]*thur/gi, 'drivethru')
+                .replace(/[^a-z0-9]/g, '');
+        }
+
+        // "اسم<TAB>سعر" سطر سطر. السعر "-" معناه امسح السعر ده (تعديل يدوي)
+        function textToPriceMap(text, into) {
+            const m = into || new Map();
+            if (!text) return m;
+            for (const line of text.split('\n')) {
+                const i = line.lastIndexOf('\t');
+                if (i < 1) continue;
+                const k = priceNorm(line.slice(0, i)), raw = line.slice(i + 1).trim();
+                if (raw === '-') { m.delete(k); continue; }
+                const p = parseFloat(raw);
+                if (isFinite(p)) m.set(k, p);
+            }
+            return m;
+        }
+
+        // rows: صفوف سحبة الأودو كـ objects. بنتجاهل الصفوف الرمادي (مفيهاش منتج).
+        function groupRaw(rows, keys) {
+            const groups = new Map();   // branchKey -> { raw, items, prods: Map(product -> qty) }
+            rows.forEach(r => {
+                const prod = String(r[keys.prod] ?? '').trim();
+                const loc = String(r[keys.loc] ?? '').trim();
+                if (!prod || !loc) return;
+                const q = parseFloat(r[keys.qty]);
+                const qty = isNaN(q) ? 0 : q;
+                const k = cleanBranchKey(loc);
+                if (!groups.has(k)) groups.set(k, { raw: loc, items: 0, prods: new Map() });
+                const g = groups.get(k);
+                g.items += qty;
+                g.prods.set(prod, (g.prods.get(prod) || 0) + qty);
+            });
+            return groups;
+        }
+
+        function matchBranch(targetName, groups) {
+            const keys = [...groups.keys()];
+            const tk = cleanBranchKey(targetName);
+            let key = groups.has(tk) ? tk : undefined;
+            if (key === undefined && BRANCH_ALIASES[tk]) {
+                const ak = BRANCH_ALIASES[tk];
+                const fa = keys.find(k => k.includes(ak) || ak.includes(k));
+                key = groups.has(ak) ? ak : fa;
+            }
+            if (key === undefined) key = keys.find(k => k.includes(tk) || tk.includes(k));
+            return key;
+        }
+
+        function computeExtiract(groups, priceMap) {
+            const used = new Set();
+            const missing = new Map();   // product -> { qty, branches:Set }
+            const value = new Map();     // branchKey -> total value
+            groups.forEach((g, k) => {
+                let v = 0;
+                g.prods.forEach((qty, prod) => {
+                    const p = priceMap.get(priceNorm(prod));
+                    if (p !== undefined) v += qty * p;
+                    else if (qty > 0) {
+                        if (!missing.has(prod)) missing.set(prod, { qty: 0, branches: new Set() });
+                        const m = missing.get(prod); m.qty += qty; m.branches.add(g.raw);
+                    }
+                });
+                value.set(k, v);
+            });
+            const rows = BRANCHES.map(name => {
+                const key = matchBranch(name, groups);
+                if (key === undefined) return { name, items: 0, value: 0, matched: false };
+                used.add(key);
+                return { name, items: groups.get(key).items, value: Math.round(value.get(key) * 100) / 100, matched: true };
+            });
+            const unmatched = [];
+            groups.forEach((g, k) => { if (!used.has(k) && g.items > 0) unmatched.push(g.raw); });
+            return { rows, missing, unmatched };
+        }
+
+        // بنفس تنسيق شيت extiract: Arial 11 Bold، حدود سودا، توسيط، هيدر ماجنتا، عمود A عرضه 46
+        function buildPriceWorkbook(ExcelLib, res) {
+            const thin = { style: 'thin', color: { argb: 'FF000000' } };
+            const border = { top: thin, left: thin, bottom: thin, right: thin };
+            const font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FF000000' } };
+            const align = { horizontal: 'center', vertical: 'middle' };
+            const head = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF00FF' }, bgColor: { argb: 'FFFF00FF' } };
+            const wb = new ExcelLib.Workbook();
+            const mk = (title, headers, widthA) => {
+                const ws = wb.addWorksheet(title, { properties: { defaultRowHeight: 15.75, defaultColWidth: 12.63 } });
+                ws.getColumn(1).width = widthA;
+                headers.forEach((h, i) => {
+                    const c = ws.getCell(1, i + 1);
+                    c.value = h; c.font = font; c.border = border; c.alignment = align; c.fill = head;
+                });
+                return ws;
+            };
+            const ws = mk('extiract', ['Branche Name', 'Quantity', 'Total Value'], 46);
+            res.rows.forEach((r, i) => {
+                const vals = [r.name, r.items, r.value];
+                vals.forEach((v, j) => {
+                    const c = ws.getCell(i + 2, j + 1);
+                    c.value = v; c.font = font; c.border = border; c.alignment = align;
+                    if (j > 0) c.numFmt = '#,##0';
+                });
+            });
+            if (res.missing.size) {
+                const wm = mk('منتجات بدون سعر', ['Product Name', 'Quantity', 'Branches'], 60);
+                [...res.missing.entries()].sort((a, b) => b[1].qty - a[1].qty).forEach(([prod, m], i) => {
+                    [prod, m.qty, m.branches.size].forEach((v, j) => {
+                        const c = wm.getCell(i + 2, j + 1);
+                        c.value = v; c.font = { ...font, color: { argb: 'FFC00000' } }; c.border = border; c.alignment = align;
+                    });
+                });
+            }
+            return wb;
+        }
+
+        // ==========================================
+        // قائمة الأسعار: بتيجي من البوابة (Firestore)، أو من ملف المستخدم لمرة واحدة
+        // ==========================================
+        let PRICES = null;            // Map
+        let PRICE_INFO = '';
+        function setPriceStatus(kind, text) {
+            const icon = document.getElementById('priceIcon');
+            const box = document.getElementById('priceStatus');
+            const cls = { wait: 'fa-solid fa-circle-notch fa-spin text-indigo-500 mt-1', ok: 'fa-solid fa-circle-check text-emerald-500 mt-1', warn: 'fa-solid fa-triangle-exclamation text-amber-500 mt-1' };
+            icon.className = cls[kind];
+            box.className = 'mb-5 flex items-start gap-3 rounded-2xl p-4 text-sm border ' + (kind === 'ok' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : kind === 'warn' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-600');
+            document.getElementById('priceText').textContent = text;
+        }
+        let gotPrices = false, askTries = 0;
+        function askParent() {
+            if (gotPrices) return;
+            try { window.parent.postMessage({ type: 'need-prices' }, '*'); } catch (e) {}
+            if (++askTries < 8) setTimeout(askParent, 1200);
+            else if (!PRICES) setPriceStatus('warn', 'قائمة الأسعار مش متاحة دلوقتي. اطلب من الأدمن يرفعها من لوحة التحكم، أو ارفع ملف أسعار من الرابط تحت.');
+        }
+        window.addEventListener('message', function (e) {
+            const d = e.data;
+            if (!d || d.type !== 'prices') return;
+            gotPrices = true;
+            if (d.empty) { PRICES = null; return setPriceStatus('warn', 'لسه مفيش قائمة أسعار في النظام. اطلب من الأدمن يرفعها من لوحة التحكم (تاب أسعار المنتجات).'); }
+            if (d.error) { PRICES = null; return setPriceStatus('warn', 'تعذر تحميل قائمة الأسعار. حدّث الصفحة وجرب تاني.'); }
+            const m = textToPriceMap(d.base, new Map());
+            textToPriceMap(d.ov, m);
+            PRICES = m;
+            const when = d.updatedAt ? new Date(d.updatedAt).toLocaleString('ar-EG') : '';
+            PRICE_INFO = m.size.toLocaleString('en-US') + ' منتج';
+            setPriceStatus('ok', 'قائمة الأسعار جاهزة: ' + PRICE_INFO + (when ? ' • آخر تحديث ' + when : ''));
+        });
+
+        function parseCSVText(text) {
+            const rows = []; let row = [], cur = '', q = false;
+            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+            for (let i = 0; i < text.length; i++) {
+                const c = text[i];
+                if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+                else if (c === '"') q = true;
+                else if (c === ',') { row.push(cur); cur = ''; }
+                else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); cur = ''; rows.push(row); row = []; }
+                else cur += c;
+            }
+            if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+            return rows;
+        }
+        function rowsToPriceMap(rows) {      // أول سعر من فوق هو اللي بيتحسب
+            const m = new Map();
+            rows.slice(1).forEach(r => {
+                const name = String(r[0] ?? '').trim();
+                const p = typeof r[1] === 'number' ? r[1] : parseFloat(String(r[1] ?? '').replace(/,/g, ''));
+                if (!name || !isFinite(p)) return;
+                const k = priceNorm(name);
+                if (!m.has(k)) m.set(k, p);
+            });
+            return m;
+        }
+        document.getElementById('btnOwnPrices').onclick = () => document.getElementById('fileInputPrices').click();
+        document.getElementById('fileInputPrices').addEventListener('change', async e => {
+            const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+            setPriceStatus('wait', 'جاري قراءة ملف الأسعار...');
+            try {
+                let rows;
+                if (/\.csv$/i.test(f.name)) rows = parseCSVText(await f.text());
+                else {
+                    await ensureLibs();
+                    const wb = XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: 'array' });
+                    const name = wb.SheetNames.find(n => n.trim().toLowerCase() === 'price list') || wb.SheetNames[0];
+                    const ws = wb.Sheets[name];
+                    const rg = XLSX.utils.decode_range(ws['!ref']); rg.e.c = Math.min(rg.e.c, 1); ws['!ref'] = XLSX.utils.encode_range(rg);
+                    rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+                }
+                const m = rowsToPriceMap(rows);
+                if (!m.size) throw new Error('الملف مفيهوش أسعار صالحة (العمود الأول اسم والتاني سعر).');
+                PRICES = m; gotPrices = true;
+                setPriceStatus('ok', 'بتستخدم قائمة الأسعار من ملفك: ' + f.name + ' (' + m.size.toLocaleString('en-US') + ' منتج) — لمرة واحدة');
+            } catch (err) { setPriceStatus('warn', 'مشكلة في ملف الأسعار: ' + err.message); }
+        });
+
+        // ==========================================
+        // رفع الملف ومعالجته
+        // ==========================================
+        let finalBlobPrice = null;
+        const $p = id => document.getElementById(id);
+        function showErrorPrice(msg) {
+            $p('loadingStatePrice').classList.add('hidden');
+            $p('dropZoneContainerPrice').style.display = 'none';
+            $p('errorMsgPrice').textContent = msg;
+            $p('errorStatePrice').classList.remove('hidden');
+        }
+        function resetPrice() {
+            ['errorStatePrice', 'successStatePrice', 'loadingStatePrice'].forEach(id => $p(id).classList.add('hidden'));
+            $p('dropZoneContainerPrice').style.display = '';
+            $p('dropZoneContentPrice').classList.remove('hidden');
+            $p('fileInputPrice').value = '';
+            finalBlobPrice = null;
+        }
+        function downloadPrice() {
+            if (!_verifyIntegrity()) return triggerAntiTamper();
+            if (!finalBlobPrice) return;
+            const d = new Date(), pad = n => String(n).padStart(2, '0');
+            const url = URL.createObjectURL(finalBlobPrice);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'Extiract_' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.xlsx';
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+        }
+
+        async function processPrice(file) {
+            if (!_verifyIntegrity()) return triggerAntiTamper();
+            $p('dropZoneContentPrice').classList.add('hidden');
+            $p('loadingStatePrice').classList.remove('hidden');
+            if (!PRICES || !PRICES.size) return showErrorPrice('قائمة الأسعار مش جاهزة. استنى لحظة لحد ما تتحمّل، أو اطلب من الأدمن يرفعها، أو ارفع ملف أسعار من الرابط فوق.');
+            try { await ensureLibs(); } catch (e) { return showErrorPrice(e.message); }
+            const reader = new FileReader();
+            reader.onload = async function (e) {
+                try {
+                    const wbIn = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    const rawData = XLSX.utils.sheet_to_json(wbIn.Sheets[wbIn.SheetNames[0]], { defval: null });
+                    if (!rawData.length) return showErrorPrice('الملف فارغ تماماً.');
+                    const headers = Object.keys(rawData[0] || {});
+                    const lower = h => h.toLowerCase();
+                    const keys = {
+                        loc: headers.find(h => lower(h).includes('destination location') || h.includes('موقع الوجهة')),
+                        prod: headers.find(h => lower(h).includes('product/name') || lower(h).includes('product name') || h.includes('اسم المنتج')),
+                        qty: headers.find(h => lower(h).includes('quantity') && !lower(h).includes('demand')) || headers.find(h => h.includes('الكمية'))
+                    };
+                    if (!keys.loc) return showErrorPrice('لم نتمكن من العثور على عمود (Stock Moves/Destination Location).');
+                    if (!keys.prod) return showErrorPrice('لم نتمكن من العثور على عمود (Stock Moves/Product/Name).');
+                    if (!keys.qty) return showErrorPrice('لم نتمكن من العثور على عمود (Stock Moves/Quantity).');
+
+                    const groups = groupRaw(rawData, keys);
+                    if (!groups.size) return showErrorPrice('الشيت لا يحتوي على أوردرات صالحة.');
+                    const res = computeExtiract(groups, PRICES);
+                    const wbOut = buildPriceWorkbook(ExcelJS, res);
+                    finalBlobPrice = new Blob([await wbOut.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+                    const withOrders = res.rows.filter(r => r.items > 0).length;
+                    const pieces = res.rows.reduce((a, r) => a + r.items, 0);
+                    const total = res.rows.reduce((a, r) => a + r.value, 0);
+                    $p('dropZoneContainerPrice').style.display = 'none';
+                    $p('loadingStatePrice').classList.add('hidden');
+                    $p('successDetailsPrice').innerHTML = 'فروع عليها أوردرات: <b>' + withOrders + '</b> من ' + res.rows.length +
+                        ' &nbsp;|&nbsp; القطع: <b>' + pieces.toLocaleString('en-US') + '</b>' +
+                        '<br>إجمالي السعر: <b>' + total.toLocaleString('en-US', { maximumFractionDigits: 2 }) + '</b>';
+                    const warns = [];
+                    if (res.missing.size) warns.push('<b>' + res.missing.size + ' منتج من غير سعر</b> (اتحسبوا بصفر وهتلاقيهم في صفحة "منتجات بدون سعر"): ' +
+                        [...res.missing.keys()].slice(0, 5).map(n => n.replace(/</g, '&lt;')).join('، ') + (res.missing.size > 5 ? '، ...' : '') +
+                        '<br>ضيف أسعارهم من لوحة التحكم (تاب أسعار المنتجات) وجرب تاني.');
+                    if (res.unmatched.length) warns.push('<b>' + res.unmatched.length + ' فرع في الأودو مش موجود في قايمة الفروع</b> فمتحسبوش: ' +
+                        res.unmatched.slice(0, 4).map(n => n.replace(/</g, '&lt;')).join('، ') + (res.unmatched.length > 4 ? '، ...' : ''));
+                    const wb = $p('warnBox');
+                    wb.innerHTML = warns.join('<hr class="my-2 border-amber-200">');
+                    wb.classList.toggle('hidden', !warns.length);
+                    $p('successStatePrice').classList.remove('hidden');
+                } catch (err) { showErrorPrice('حدث خطأ: ' + err.message); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        (function setup() {
+            const zone = $p('dropZoneContainerPrice'), input = $p('fileInputPrice');
+            zone.addEventListener('click', () => input.click());
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('border-indigo-500', 'bg-indigo-100'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('border-indigo-500', 'bg-indigo-100'));
+            zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('border-indigo-500', 'bg-indigo-100'); if (e.dataTransfer.files[0]) processPrice(e.dataTransfer.files[0]); });
+            input.addEventListener('change', e => { if (e.target.files[0]) processPrice(e.target.files[0]); });
+            askParent();
+        })();
+    </script>
+</body>
+</html>
