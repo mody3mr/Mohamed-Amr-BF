@@ -4,41 +4,57 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>تسجيل الدخول | بوابة أدوات Odoo</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t!=='dark'&&t!=='light')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t}catch(e){}})()</script>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js">
+  <link rel="modulepreload" href="js/firebase.js">
+  <link rel="modulepreload" href="js/common.js">
+  <link rel="modulepreload" href="js/login.js">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="auth-wrap">
-    <div class="auth-card">
-      <div class="auth-head">
-        <i class="fa-solid fa-layer-group"></i>
-        <h1>بوابة أدوات Odoo</h1>
-        <p>سجّل دخولك بالرقم الوظيفي</p>
-      </div>
-      <div class="auth-body">
-        <div id="notice" class="msg info hidden"></div>
-        <div id="error" class="msg err hidden"></div>
-        <form id="form" autocomplete="off">
-          <div class="field">
-            <label for="empId">الرقم الوظيفي</label>
-            <input id="empId" name="username" type="text" dir="ltr" inputmode="text" autocomplete="username" required autofocus>
-            <div id="status" class="status"></div>
+  <div class="page">
+    <button class="btn ghost sm icon theme-fab" id="btnTheme" type="button"></button>
+    <div class="auth-wrap">
+      <div class="auth-card">
+        <div class="auth-head">
+          <i class="fa-solid fa-layer-group"></i>
+          <h1>بوابة أدوات Odoo</h1>
+          <p>سجّل دخولك بالرقم الوظيفي</p>
+        </div>
+        <div class="auth-body">
+          <div id="notice" class="msg info hidden"></div>
+          <div id="error" class="msg err hidden"></div>
+          <form id="form" autocomplete="off">
+            <div class="field">
+              <label for="empId">الرقم الوظيفي</label>
+              <input id="empId" name="username" type="text" dir="ltr" inputmode="text" autocomplete="username" required autofocus>
+              <div id="status" class="status"></div>
+            </div>
+            <div class="field">
+              <label for="pass" id="passLabel">كلمة المرور</label>
+              <input id="pass" name="password" type="password" dir="ltr" autocomplete="current-password" disabled required>
+            </div>
+            <div class="field hidden" id="confirmField">
+              <label for="pass2">تأكيد كلمة المرور</label>
+              <input id="pass2" type="password" dir="ltr" autocomplete="new-password" disabled>
+            </div>
+            <button id="btn" class="btn block" type="submit" disabled><i class="fa-solid fa-right-to-bracket"></i> <span id="btnText">دخول</span></button>
+          </form>
+          <div class="forgot">
+            <button type="button" id="btnForgot" class="link-btn"><i class="fa-solid fa-headset"></i> نسيت كلمة المرور؟</button>
           </div>
-          <div class="field">
-            <label for="pass" id="passLabel">كلمة المرور</label>
-            <input id="pass" name="password" type="password" dir="ltr" autocomplete="current-password" disabled required>
-          </div>
-          <div class="field hidden" id="confirmField">
-            <label for="pass2">تأكيد كلمة المرور</label>
-            <input id="pass2" type="password" dir="ltr" autocomplete="new-password" disabled>
-          </div>
-          <button id="btn" class="btn block" type="submit" disabled><i class="fa-solid fa-right-to-bracket"></i> <span id="btnText">دخول</span></button>
-        </form>
-        <div class="forgot">
-          <button type="button" id="btnForgot" class="link-btn"><i class="fa-solid fa-headset"></i> نسيت كلمة المرور؟</button>
         </div>
       </div>
     </div>
+    <footer class="site-foot"><a class="credit-link" href="https://wa.me/201094264206" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> © 2026 تم الإنشاء بواسطة | محمد عمرو ابراهيم</a></footer>
   </div>
 
   <!-- التواصل مع الإدارة لتصفير كلمة المرور -->
