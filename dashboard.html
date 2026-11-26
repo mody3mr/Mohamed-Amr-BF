@@ -4,44 +4,59 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>لوحة التحكم | بوابة أدوات Odoo</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t!=='dark'&&t!=='light')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t}catch(e){}})()</script>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js">
+  <link rel="modulepreload" href="js/firebase.js">
+  <link rel="modulepreload" href="js/common.js">
+  <link rel="modulepreload" href="js/dashboard.js">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div id="boot" class="center-msg">جاري التحميل...</div>
 
-  <div id="app" class="hidden">
+  <div id="app" class="page hidden">
     <div class="topbar">
       <div class="brand"><i class="fa-solid fa-layer-group"></i> بوابة أدوات Odoo</div>
       <div class="sp"></div>
       <div class="who"><i class="fa-solid fa-circle-user"></i><span class="nm" id="whoName"></span><span class="badge" id="whoRole"></span></div>
+      <button class="btn ghost sm icon" id="btnTheme" type="button"></button>
       <button class="btn ghost sm" id="btnPass"><i class="fa-solid fa-key"></i> كلمة المرور</button>
       <button class="btn ghost sm" id="btnOut"><i class="fa-solid fa-right-from-bracket"></i> خروج</button>
     </div>
 
-    <div class="container">
+    <div class="container grow" style="width:100%">
+      <div id="maintBanner" class="banner hidden"><i class="fa-solid fa-triangle-exclamation"></i> وضع الصيانة شغال: المستخدمين العاديين مش شايفين الموقع دلوقتي. الأدمن بس بيدخل.</div>
       <div class="tabs" id="tabs">
         <button class="tab active" data-tab="tools"><i class="fa-solid fa-toolbox"></i> الأدوات</button>
         <button class="tab adm hidden" data-tab="users"><i class="fa-solid fa-users"></i> المستخدمين</button>
         <button class="tab adm hidden" data-tab="manage"><i class="fa-solid fa-screwdriver-wrench"></i> إدارة الأدوات</button>
+        <button class="tab adm hidden" data-tab="settings"><i class="fa-solid fa-sliders"></i> إعدادات الموقع</button>
       </div>
 
       <section id="tab-tools">
         <h2>أدواتك</h2>
         <p class="sub">اختار الأداة اللي عايز تفتحها.</p>
-        <div id="toolsGrid" class="grid"></div>
+        <div id="toolsGrid" class="grid"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
       </section>
 
       <section id="tab-users" class="hidden">
         <div class="panel">
           <div class="panel-head">
-            <div><h2>المستخدمين</h2><div class="sub" style="margin:0">إضافة وتعديل وإيقاف الحسابات</div></div>
+            <div><h2>المستخدمين</h2><div class="sub" style="margin:0">إضافة وتعديل وحظر الحسابات</div></div>
             <div class="sp"></div>
             <button class="btn" id="btnAddUser"><i class="fa-solid fa-user-plus"></i> مستخدم جديد</button>
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>الرقم الوظيفي</th><th>الاسم</th><th>الدور</th><th>الحالة</th><th>الأدوات</th><th>إجراءات</th></tr></thead>
-            <tbody id="usersBody"></tbody>
+            <tbody id="usersBody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:26px">جاري التحميل...</td></tr></tbody>
           </table></div>
         </div>
       </section>
@@ -59,7 +74,30 @@
           </table></div>
         </div>
       </section>
+
+      <section id="tab-settings" class="hidden">
+        <div class="panel">
+          <div class="panel-head"><div><h2>إعدادات الموقع</h2><div class="sub" style="margin:0">تحكم في تشغيل الموقع وتحديث الملفات</div></div><div class="sp"></div><span class="badge ok" id="siteState">الموقع شغال</span></div>
+          <div class="settings">
+            <div class="set-row">
+              <div><b>وضع الصيانة (إيقاف الموقع للتعديلات)</b>
+                <div class="sub">لما تفعّله المستخدمين العاديين بيشوفوا رسالة الصيانة ومبيقدروش يفتحوا أي أداة، حتى لو كانوا فاتحين الموقع دلوقتي. انت (الأدمن) بتدخل عادي.</div></div>
+              <label class="switch"><input type="checkbox" id="swMaint"><span></span></label>
+            </div>
+            <div class="field" style="margin-top:14px"><label for="maintMsg">رسالة الصيانة</label>
+              <textarea id="maintMsg" rows="3" maxlength="300" placeholder="بنعمل شوية تحديثات دلوقتي، ارجع كمان شوية."></textarea>
+              <small>الرسالة بتظهر للمستخدمين لما الصيانة تتفعّل.</small></div>
+            <div><button class="btn ghost sm" id="btnSaveMsg"><i class="fa-solid fa-floppy-disk"></i> حفظ الرسالة</button></div>
+            <div class="set-row" style="margin-top:14px">
+              <div><b>تحديث الملفات لكل المستخدمين</b>
+                <div class="sub">GitHub بيخلّي المتصفحات تحتفظ بالملفات القديمة لحد 10 دقايق. بعد ما ترفع تعديلات وتستنى دقيقة لحد ما GitHub Pages ينشرها، اضغط هنا وكل اللي فاتحين الموقع هياخدوا النسخة الجديدة خلال ثواني.</div></div>
+              <button class="btn" id="btnPush"><i class="fa-solid fa-rotate"></i> تحديث دلوقتي</button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
+    <footer class="site-foot"><a class="credit-link" href="https://wa.me/201094264206" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> © 2026 تم الإنشاء بواسطة | محمد عمرو ابراهيم</a></footer>
   </div>
 
   <script type="module" src="js/dashboard.js"></script>
