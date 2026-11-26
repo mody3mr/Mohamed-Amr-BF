@@ -114,6 +114,7 @@ async function seedDefault() {
 /* ------------------------------------------------------------------ manage tools */
 function renderManage() {
   const body = $("toolsBody");
+  $("btnAddPriceTool").classList.toggle("hidden", tools.some(t => t.path === "tools/price-calc.html"));
   if (!tools.length) {
     body.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:30px">مفيش أدوات. اضغط "أداة جديدة" أو أضف الأدوات الجاهزة من تاب "الأدوات".</td></tr>`;
     return;
@@ -182,6 +183,15 @@ function toolModal(existing, existingHtml) {
 }
 
 $("btnAddTool").onclick = () => toolModal(null, "");
+$("btnAddPriceTool").onclick = async () => {
+  try {
+    await setDoc(doc(db, "tools", "price-calc"), {
+      name: "أداة حساب الأسعار", icon: "fa-solid fa-calculator", type: "file", path: "tools/price-calc.html",
+      description: "ارفع سحبة الأودو وهتاخد شيت extiract: عدد القطع وإجمالي السعر لكل فرع.", createdAt: serverTimestamp()
+    });
+    toast("تمت إضافة أداة حساب الأسعار");
+  } catch (e) { toast(arErr(e), "err"); }
+};
 $("toolsBody").addEventListener("click", async e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const t = tools.find(x => x.id === b.dataset.id); if (!t) return;
@@ -443,9 +453,21 @@ $("btnOut").onclick = logout;
 /* ------------------------------------------------------------------ tabs + boot */
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b === btn));
-  ["tools", "users", "manage", "settings"].forEach(n => $("tab-" + n).classList.toggle("hidden", n !== btn.dataset.tab));
+  ["tools", "users", "manage", "prices", "settings"].forEach(n => $("tab-" + n).classList.toggle("hidden", n !== btn.dataset.tab));
   if (btn.dataset.tab === "users") startUsers();
+  if (btn.dataset.tab === "prices") openPrices();
 }));
+
+// تاب الأسعار بيتحمّل أول ما تفتحه بس (عشان اللوحة تفضل سريعة)
+let pricesOpened = false;
+async function openPrices() {
+  if (pricesOpened || !isAdmin) return;
+  pricesOpened = true;
+  try {
+    const mod = await import("./prices-admin.js");
+    mod.mount({ db, me, root: $("pricesRoot"), esc, toast, arErr, modal });
+  } catch (e) { pricesOpened = false; toast(arErr(e), "err"); }
+}
 
 // الشاشة بتظهر فورًا من بيانات حسابك، والأدوات بتتحمّل من الكاش وبعدين بتتحدّث لحظيًا
 $("whoName").textContent = me.name;
