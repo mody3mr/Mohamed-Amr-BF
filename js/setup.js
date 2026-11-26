@@ -1,7 +1,8 @@
 import { auth, db } from "./firebase.js";
 import { createUserWithEmailAndPassword, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, getDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { normId, validId, makeEmail, arErr } from "./common.js";
+import { normId, validId, makeEmail, arErr, initThemeButton } from "./common.js";
+initThemeButton(document.getElementById("btnTheme"));
 
 const $ = id => document.getElementById(id);
 const showErr = m => { $("error").textContent = m; $("error").classList.remove("hidden"); };
