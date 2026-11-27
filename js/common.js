@@ -132,7 +132,7 @@ export function guard({ admin = false } = {}) {
             if (r.ok) return resolve(api);
             if (r.bound) return signOut(auth).finally(() => location.replace("index.html?reason=session-bound"));
             if (r.busy) return signOut(auth).finally(() => location.replace("index.html?reason=session-busy"));
-            document.body.innerHTML = '<div class="center-msg">تعذر التحقق من الجلسة، اتأكد من الإنترنت.<br><br><button class="btn" onclick="location.reload()">إعادة المحاولة</button></div>';
+            document.body.innerHTML = `<div class="center-msg">تعذر التحقق من الجلسة، اتأكد من الإنترنت.<br><small style="opacity:.7" dir="ltr">${esc((r.error && (r.error.code || r.error.message)) || "")}</small><br><br><button class="btn" onclick="location.reload()">إعادة المحاولة</button></div>`;
           });
         } else if (profile.role !== first.role) {
           location.reload();
