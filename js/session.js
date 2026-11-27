@@ -11,7 +11,7 @@ const HEARTBEAT_MS = 30000;
 const RECENT_MS = 25000;               // لو آخر نبضة ناجحة من نفس المتصفح أحدث من كده نفتح الصفحة فورًا
 
 let SID = null;
-function getSid() {
+export function getSid() {
   if (SID) return SID;
   try { const s = localStorage.getItem("sid"); if (s && s.length >= 20) return (SID = s); } catch (_) {}
   const a = new Uint8Array(24); crypto.getRandomValues(a);
@@ -39,12 +39,13 @@ export async function claimSession(uid, lock = true) {
   const ref = doc(db, "sessions", uid), dev = doc(db, "devices", uid), sid = getSid();
   try {
     await runTransaction(db, async tx => {
+      // لازم كل القراءات تيجي قبل أي كتابة (شرط في Firestore transactions)
+      const d = lock ? await tx.get(dev) : null;
+      const s = await tx.get(ref);
       if (lock) {
-        const d = await tx.get(dev);
         if (!d.exists()) tx.set(dev, { sid, device: deviceLabel(), boundAt: serverTimestamp() });
         else if (d.data().sid !== sid) { const e = new Error("bound"); e.code = "bound-other"; e.device = d.data().device || ""; throw e; }
       }
-      const s = await tx.get(ref);
       const base = { sid, device: deviceLabel(), lastSeen: serverTimestamp(), closed: false };
       if (!s.exists()) tx.set(ref, { ...base, startedAt: serverTimestamp() });
       else if (s.data().sid === sid) tx.update(ref, base);
@@ -60,6 +61,7 @@ export async function claimSession(uid, lock = true) {
       }
       return { ok: false, busy: true };
     }
+    console.error("claimSession", e);
     return { ok: false, error: e };
   }
 }
