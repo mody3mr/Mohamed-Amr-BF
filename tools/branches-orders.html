@@ -4,47 +4,48 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>تجميع الأوردرات بالفروع | Odoo</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    /* الوضع الداكن/الفاتح: بيتحدد من البوابة (hash أو رسالة) أو من إعدادات الجهاز */
+    (function(){
+        function set(d){document.documentElement.classList.toggle('dark',!!d)}
+        var h=(location.hash||'').replace('#','');
+        if(h==='dark')set(true);else if(h==='light')set(false);else{try{set(matchMedia('(prefers-color-scheme: dark)').matches)}catch(e){}}
+        window.addEventListener('message',function(e){var d=e.data;if(d&&d.type==='theme')set(d.dark)});
+    })();
+    </script>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <link rel="stylesheet" href="../css/tools.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
         body { font-family: 'Tajawal', sans-serif; }
     </style>
-    <style id="bf-dark-css">
-        /* نفس ألوان الوضع الداكن بتاع الموقع (html.dark في tools.css) */
-        html.bf-dark { color-scheme: dark; }
-        html.bf-dark body, html.bf-dark .bg-slate-50 { background-color: #0b1020; color: #e5e7eb; }
-        html.bf-dark .bg-white { background-color: #131a2e; }
-        html.bf-dark .bg-white\/60 { background-color: #131a2e99; }
-        html.bf-dark .border-slate-100, html.bf-dark .border-slate-200 { border-color: #26304d; }
-        html.bf-dark .text-slate-800, html.bf-dark .text-slate-700 { color: #e5e7eb; }
-        html.bf-dark .text-slate-600 { color: #cbd5e1; }
-        html.bf-dark .text-slate-500 { color: #a3b1c6; }
-        html.bf-dark .text-slate-400 { color: #8795ad; }
-        html.bf-dark .hover\:bg-slate-50:hover { background-color: #0b1020; }
-        html.bf-dark .bg-indigo-50, html.bf-dark .bg-indigo-50\/60, html.bf-dark .bg-indigo-50\/50 { background-color: #6366f124; }
-        html.bf-dark .hover\:bg-indigo-50:hover { background-color: #6366f124; }
-        html.bf-dark .bg-indigo-100 { background-color: #6366f138; }
-        html.bf-dark .border-indigo-100, html.bf-dark .border-indigo-200 { border-color: #818cf859; }
-        html.bf-dark .text-indigo-600, html.bf-dark .text-indigo-500 { color: #c7d2fe; }
-        html.bf-dark .bg-rose-50, html.bf-dark .hover\:bg-rose-50:hover { background-color: #f43f5e24; }
-        html.bf-dark .border-rose-200 { border-color: #fb718559; }
-        html.bf-dark .text-rose-600, html.bf-dark .text-rose-800 { color: #fda4af; }
-        html.bf-dark .bg-amber-50 { background-color: #f59e0b24; }
-        html.bf-dark .border-amber-200 { border-color: #fbbf2459; }
-        html.bf-dark .text-amber-800 { color: #fcd34d; }
-        html.bf-dark .bg-sky-50 { background-color: #0ea5e924; }
-        html.bf-dark .border-sky-200 { border-color: #38bdf859; }
-        html.bf-dark .text-sky-800 { color: #7dd3fc; }
-        html.bf-dark .bg-emerald-50 { background-color: #10b98124; }
-        html.bf-dark .border-emerald-100 { border-color: #34d39959; }
-        html.bf-dark .text-emerald-600, html.bf-dark .hover\:text-emerald-600:hover { color: #6ee7b7; }
-        html.bf-dark .shadow-xl { --tw-shadow-color: #000; }
-        .bf-theme-btn { position: fixed; top: 12px; left: 12px; z-index: 50; width: 38px; height: 38px; border-radius: 9999px;
-            border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-        html.bf-dark .bf-theme-btn { background: #131a2e; border-color: #26304d; color: #fcd34d; }
+    <script>
+    /* مكتبات الإكسيل (حوالي 2MB) بتتحمّل في الخلفية بعد ما الصفحة تظهر، مش قبلها */
+    (function(){
+        var SRC={xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',exceljs:'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js'};
+        function load(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){rej(new Error('تعذر تحميل مكتبة معالجة الإكسيل. اتأكد من الإنترنت وجرب تاني.'))};document.head.appendChild(s)})}
+        var p=null;
+        window.ensureLibs=function(){
+            if(!p)p=Promise.all([window.XLSX?0:load(SRC.xlsx),window.ExcelJS?0:load(SRC.exceljs)]).then(function(){},function(e){p=null;throw e});
+            return p;
+        };
+        window.addEventListener('load',function(){setTimeout(function(){window.ensureLibs().catch(function(){})},600)});
+    })();
+    </script>
+    <style>
+        /* كلاسات مش موجودة في tools.css */
+        .bg-indigo-50{background-color:#eef2ff}
+        .border-t{border-top-width:1px}
+        .max-h-72{max-height:18rem}
+        .overflow-auto{overflow:auto}
+        .p-2{padding:.5rem}
+        .sticky{position:sticky}
+        .w-24{width:6rem}
+        html.dark .bg-indigo-50{background-color:#6366f124}
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-6">
@@ -255,7 +256,13 @@ function resetTool() {
     dropZone.style.display = ''; fileInput.value = ''; finalBlob = null;
 }
 
-function processFile(file) {
+async function processFile(file) {
+    $('dropContent').classList.add('hidden');
+    $('loading').classList.remove('hidden');
+    try { await ensureLibs(); } catch (e) { return showError(e.message); }
+    processFileNow(file);
+}
+function processFileNow(file) {
     $('dropContent').classList.add('hidden');
     $('loading').classList.remove('hidden');
     const reader = new FileReader();
@@ -306,71 +313,6 @@ function downloadResult() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-</script>
-<script>
-/* الوضع الداكن: بيتابع وضع الموقع (حتى لو الأداة جوه iframe) أو وضع الجهاز، وفيه زرار يدوي */
-(function () {
-    const KEY = 'bf-tools-theme', root = document.documentElement;
-    const lum = c => {
-        const m = c && c.match(/[\d.]+/g);
-        if (!m || m.length < 3 || (m.length > 3 && +m[3] === 0)) return null;
-        return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255;
-    };
-    const parentDoc = () => { try { if (window.parent !== window && window.parent.document) return window.parent.document; } catch (e) {} return null; };
-    function explicit(el) {
-        if (!el) return null;
-        const bag = [el.className && el.className.toString(), el.getAttribute('data-theme'), el.getAttribute('data-bs-theme'),
-                     el.getAttribute('data-mode'), el.getAttribute('data-color-mode'), el.getAttribute('theme')].filter(Boolean).join(' ').toLowerCase();
-        if (/(^|[\s_-])dark([\s_-]|$)/.test(bag) && !/(^|[\s_-])light([\s_-]|$)/.test(bag.replace(/bf-dark/g, ''))) return true;
-        if (/(^|[\s_-])light([\s_-]|$)/.test(bag)) return false;
-        return null;
-    }
-    function fromDoc(doc, useLum) {
-        if (!doc) return null;
-        for (const el of [doc.documentElement, doc.body]) {
-            if (el === root) { const c = (el.className || '').toString().replace(/bf-dark/g, ''); const t = explicit({ className: c, getAttribute: a => el.getAttribute(a) }); if (t !== null) return t; }
-            else { const t = explicit(el); if (t !== null) return t; }
-        }
-        if (useLum) for (const el of [doc.body, doc.documentElement]) {
-            if (!el) continue; const l = lum(doc.defaultView.getComputedStyle(el).backgroundColor);
-            if (l !== null) return l < 0.45;
-        }
-        return null;
-    }
-    function fromStorage() {
-        try {
-            for (const k of ['theme', 'darkMode', 'dark-mode', 'color-theme', 'color-scheme', 'mode']) {
-                const v = (localStorage.getItem(k) || '').toLowerCase();
-                if (v === 'dark' || v === 'true') return true;
-                if (v === 'light' || v === 'false') return false;
-            }
-        } catch (e) {}
-        return null;
-    }
-    const dark = () => {
-        try { const o = localStorage.getItem(KEY); if (o === 'dark') return true; if (o === 'light') return false; } catch (e) {}
-        let d = fromDoc(parentDoc(), true);
-        if (d === null) d = fromDoc(document, false);
-        if (d === null) d = fromStorage();
-        if (d === null) d = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
-        return !!d;
-    };
-    const btn = document.createElement('button');
-    btn.className = 'bf-theme-btn'; btn.type = 'button'; btn.title = 'تبديل الوضع الداكن / الفاتح';
-    function apply() {
-        const d = dark();
-        root.classList.toggle('bf-dark', d);
-        btn.innerHTML = d ? '<i class="fa-solid fa-sun"></i>' : '<i class="fa-solid fa-moon"></i>';
-    }
-    btn.onclick = () => { try { localStorage.setItem(KEY, root.classList.contains('bf-dark') ? 'light' : 'dark'); } catch (e) {} apply(); };
-    document.body.appendChild(btn);
-    apply();
-    const watch = d => { if (d) try { const mo = new MutationObserver(apply); [d.documentElement, d.body].forEach(el => el && mo.observe(el, { attributes: true })); } catch (e) {} };
-    watch(parentDoc()); watch(document);
-    if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply);
-    window.addEventListener('storage', apply);
-    setInterval(apply, 1500);
-})();
 </script>
 </body>
 </html>
