@@ -2,6 +2,7 @@ import { auth, db } from "./firebase.js";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, getDoc, updateDoc, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { normId, validId, arErr, esc, initThemeButton } from "./common.js";
+import { claimSession } from "./session.js";
 
 // رقم واتساب مدير النظام (للتواصل لما حد ينسى كلمة المرور)
 const ADMIN_WHATSAPP = "201094264296";
@@ -27,9 +28,14 @@ function lockForm() {
 }
 
 function notice(msg) { $("notice").textContent = msg; $("notice").classList.remove("hidden"); }
-if (new URLSearchParams(location.search).get("reason") === "disabled") {
-  notice("الحساب ده محظور أو مش موجود. كلّم مسؤول النظام.");
-}
+const REASON = new URLSearchParams(location.search).get("reason");
+const BUSY_MSG = "الحساب ده شغال دلوقتي على جهاز تاني. سجّل خروج منه الأول، أو استنى دقيقتين لو الجهاز اتقفل، أو كلّم مسؤول النظام.";
+if (REASON === "disabled") notice("الحساب ده محظور أو مش موجود. كلّم مسؤول النظام.");
+const BOUND_MSG = "الحساب ده مربوط بجهاز تاني، ومينفعش تدخل منه إلا من جهازك المسجّل. لو غيّرت جهازك كلّم مسؤول النظام يفك الربط.";
+if (REASON === "session-busy") notice(BUSY_MSG);
+if (REASON === "session-bound") notice(BOUND_MSG);
+if (REASON === "session-taken") notice("اتسجّل خروجك لأن حسابك اتفتح من جهاز تاني.");
+if (REASON === "session-ended") notice("الإدارة أنهت جلستك. سجّل دخول تاني.");
 // لو الموقع في وضع الصيانة نقول للمستخدم من الأول (الأدمن بيدخل عادي)
 getDoc(doc(db, "meta", "site")).then(s => {
   if (s.exists() && s.data().maintenance === true) notice("الموقع تحت الصيانة دلوقتي. الدخول متاح للمسؤولين بس.");
@@ -128,7 +134,19 @@ $("form").addEventListener("submit", async e => {
       cred = await signInWithEmailAndPassword(auth, d.email, pass);
     }
 
-    // مفيش قراءة إضافية هنا: لوحة التحكم بتتأكد من الحساب (وبتطرد المحظور) أول ما تفتح.
+    // قفل الجهاز الواحد (الأدمن مستثنى): لو الحساب شغال على جهاز تاني بنرفض الدخول
+    try {
+      const ps = await getDoc(doc(db, "users", cred.user.uid));
+      if (ps.exists() && ps.data().role !== "admin") {
+        const r = await claimSession(cred.user.uid, ps.data().deviceLock !== false);
+        if (!r.ok) {
+          await signOut(auth);
+          showErr(r.bound ? BOUND_MSG : r.busy ? BUSY_MSG : "تعذر التحقق من الجلسة، اتأكد من الإنترنت وجرب تاني.");
+          btn.disabled = false;
+          return;
+        }
+      }
+    } catch (_) { /* لوحة التحكم هتتحقق تاني */ }
     location.replace("dashboard.html");
   } catch (err) {
     const wrong = err && (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password");
