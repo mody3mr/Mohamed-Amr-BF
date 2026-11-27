@@ -1,6 +1,7 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { sessionGate, releaseSession } from "./session.js";
 
 export const EMAIL_DOMAIN = "fps-portal.app";
 
@@ -64,7 +65,7 @@ export function initThemeButton(btn) {
 // بنجبر المتصفح يجيب نسخة جديدة من كل الملفات وبعدين يعمل ريفريش مرة واحدة.
 const CORE_ASSETS = [
   "index.html", "dashboard.html", "tool.html", "setup.html", "css/style.css",
-  "js/common.js", "js/prices-core.js", "js/prices-admin.js", "js/firebase.js", "js/firebase-config.js", "js/login.js", "js/dashboard.js", "js/tool.js", "js/setup.js"
+  "js/common.js", "js/session.js", "js/prices-core.js", "js/prices-admin.js", "js/firebase.js", "js/firebase-config.js", "js/login.js", "js/dashboard.js", "js/tool.js", "js/setup.js"
 ];
 async function refreshAssets() {
   const list = new Set(CORE_ASSETS);
@@ -125,7 +126,14 @@ export function guard({ admin = false } = {}) {
         if (site.maintenance === true && profile.role !== "admin") return showMaintenance(site.message);
         if (!done) {
           done = true; first = { role: profile.role };
-          resolve(api);
+          if (profile.role === "admin") return resolve(api);        // الأدمن مستثنى من قفل الجهاز الواحد
+          // المستخدم العادي: جلسة واحدة نشطة بس
+          sessionGate(user.uid, why => signOut(auth).finally(() => location.replace("index.html?reason=session-" + why)), profile.deviceLock !== false).then(r => {
+            if (r.ok) return resolve(api);
+            if (r.bound) return signOut(auth).finally(() => location.replace("index.html?reason=session-bound"));
+            if (r.busy) return signOut(auth).finally(() => location.replace("index.html?reason=session-busy"));
+            document.body.innerHTML = '<div class="center-msg">تعذر التحقق من الجلسة، اتأكد من الإنترنت.<br><br><button class="btn" onclick="location.reload()">إعادة المحاولة</button></div>';
+          });
         } else if (profile.role !== first.role) {
           location.reload();
         }
@@ -152,6 +160,7 @@ export function guard({ admin = false } = {}) {
 }
 
 export async function logout() {
+  try { if (auth.currentUser) await releaseSession(auth.currentUser.uid); } catch (_) {}
   try { await signOut(auth); } catch (_) {}
   location.replace("index.html");
 }
