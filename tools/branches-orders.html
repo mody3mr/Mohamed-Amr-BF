@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تجميع الأوردرات بالفروع | Odoo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+        body { font-family: 'Tajawal', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-6">
+
+<div class="max-w-2xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+    <div class="bg-indigo-600 p-8 text-center">
+        <i class="fa-solid fa-list-check text-5xl text-white mb-4"></i>
+        <h1 class="text-3xl font-bold text-white">تجميع الأوردرات بالفروع</h1>
+        <p class="text-indigo-200 mt-2 text-sm">كل فرع وأرقام أوردراته في خلية واحدة بالترتيب المخصص</p>
+    </div>
+
+    <div class="p-8">
+        <div class="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-5 mb-6 text-sm text-slate-600 leading-7">
+            ارفع شيت أودو الخام وهينزلك شيت فيه كل فرع بترتيبه وأرقام أوردراته. الأداة بتقرا عمودي Destination Location وReference وبتتجاهل الصفوف الرمادي والفاضية.
+        </div>
+
+        <div id="dropZone" class="border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/50 p-10 text-center transition-all hover:bg-indigo-50 hover:border-indigo-400 cursor-pointer flex flex-col items-center justify-center">
+            <div id="dropContent">
+                <div class="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i class="fa-solid fa-file-arrow-up"></i></div>
+                <p class="font-bold text-slate-700">اضغط هنا لرفع شيت أودو الخام</p>
+                <p class="text-xs text-slate-400 mt-1">أو اسحب وأفلت الشيت هنا (xlsx / xls / csv)</p>
+            </div>
+            <div id="loading" class="hidden text-indigo-500">
+                <i class="fa-solid fa-circle-notch fa-spin text-3xl mb-2"></i>
+                <p class="font-bold">جاري المعالجة...</p>
+            </div>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden">
+
+        <div id="errorBox" class="hidden mt-6 text-center bg-rose-50 border border-rose-200 p-6 rounded-2xl">
+            <i class="fa-solid fa-triangle-exclamation text-3xl text-rose-500 mb-2"></i>
+            <p id="errorMsg" class="text-sm text-rose-600 font-medium"></p>
+            <button onclick="resetTool()" class="mt-4 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 px-6 py-2 rounded-lg font-bold text-sm">حاول مرة تانية</button>
+        </div>
+
+        <div id="successBox" class="hidden mt-6 text-center">
+            <h4 class="text-lg font-bold text-slate-800">التجميع جاهز!</h4>
+            <p id="successDetails" class="text-xs text-emerald-600 mt-2 font-medium bg-emerald-50 inline-block px-3 py-1 rounded-full border border-emerald-100 leading-6"></p>
+            <div id="warnBox" class="hidden mt-4 text-right bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 leading-7"></div>
+            <div class="mt-5 max-h-72 overflow-auto border border-slate-200 rounded-xl text-right">
+                <table class="w-full text-sm">
+                    <thead class="bg-indigo-50 text-slate-600 sticky top-0"><tr><th class="p-2 font-bold">اسم الفرع</th><th class="p-2 font-bold w-24 text-center">الأوردرات</th></tr></thead>
+                    <tbody id="previewBody"></tbody>
+                </table>
+            </div>
+            <div class="mt-5 flex gap-3 justify-center flex-wrap">
+                <button onclick="downloadResult()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/30 flex items-center gap-2"><i class="fa-solid fa-download"></i> تحميل الشيت الجاهز</button>
+                <button onclick="resetTool()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-6 py-3 rounded-xl font-bold">شيت جديد</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-8 text-center">
+    <a href="https://wa.me/201094264206" target="_blank" class="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-emerald-600 bg-white/60 px-5 py-2.5 rounded-full border border-slate-200 shadow-sm">
+        <i class="fa-brands fa-whatsapp text-lg text-emerald-500"></i> © 2026 تم الإنشاء بواسطة | محمد عمرو ابراهيم
+    </a>
+</div>
+
+<script>
+/* قائمة الفروع بالترتيب المخصص + الكلمات المفتاحية للمطابقة مع أسماء Odoo */
+const CUSTOM_BRANCHES = [
+    { name: 'Breadfast Coffee - Chillout El Rehab', keys: ['chillout el rehab', 'rehab'] },
+    { name: 'Breadfast coffee - Web Help office building', keys: ['Web Help'] },
+    { name: 'Breadfast Coffee - Schneider Office', keys: ['schneider'] },
+    { name: 'Breadfast Coffee - Smart Village', keys: ['smart village'] },
+    { name: 'Giza Patuea', keys: ['giza patuea', 'giza plateau', 'plateau'] },
+    { name: 'Breadfast Coffee - New Giza', keys: ['New Giza'] },
+    { name: 'Breadfast Coffee - Almaza', keys: ['almaza'] },
+    { name: 'BreadFast Coffee - City Stars', keys: ['city stars'] },
+    { name: 'Breadfast Coffee - Al burouj', keys: ['burouj', 'borouj'] },
+    { name: 'Breadfast Coffee - New Cairo Drive Thru', keys: ['new cairo drive'] },
+    { name: 'Breadfast Coffee - Narges Promenade', keys: ['narges'] },
+    { name: 'Breadfast Coffee - TOTAL Golden Square Drive-thru', keys: ['golden square'] },
+    { name: 'Breadfast Coffee - Fuel-up Zayed ', keys: ['Fuel-up'] },
+    { name: 'Breadfast Coffee - Total Zayed', keys: ['total zayed'] },
+    { name: 'Breadfast Coffee - Mall of Egypt', keys: ['mall of egypt'] },
+    { name: 'Breadfast Coffee - City Center Maadi', keys: ['City Center Maadi', 'ccm'] },
+    { name: 'Breadfast Coffee - Campous', keys: ['campus', 'campous'] },
+    { name: 'Breadfast Coffee - Maadi 233', keys: ['maadi 233', '233'] },
+    { name: 'Breadfast Coffee - Etisalat', keys: ['etisalat'] },
+    { name: 'Breadfast Coffee - Ahli United Bank Egypt', keys: ['ahli united'] },
+    { name: 'Breadfast Coffee - Ryze Club', keys: ['ryze'] },
+    { name: 'Breadfast Coffee - AIB Office', keys: ['aib office', 'aib'] },
+    { name: 'Breadfast Coffee - P&G', keys: ['p&g', 'p & g'] },
+    { name: 'ENBD', keys: ['enbd', 'emirates nbd'] },
+    { name: 'Breadfast Coffee - Pepsico', keys: ['pepsico', 'pepsi'] },
+    { name: 'Breadfast Coffee - ADNOC Shorouk', keys: ['adnoc shorouk', 'adnoc'] },
+    { name: 'Breadfast Coffee - BUE', keys: ['bue'] },
+    { name: 'Breadfast Coffee - Korba', keys: ['korba'] },
+    { name: 'Breadfast Coffee - Cairo Bank', keys: ['cairo bank'] },
+    { name: 'Breadfast Coffee - Alex Bank office', keys: ['alex bank'] },
+    { name: 'Breadfast Coffee - Giza system', keys: ['giza system'] },
+    { name: 'Auc', keys: ['auc'] },
+    { name: 'Breadfast Coffee - Mountain view', keys: ['Mountain view', 'MOUNT'] },
+    { name: 'Breadfast Coffee - TOTAL Alex Gates Drive Thru', keys: ['alex gates'] },
+    { name: 'City centre Alex', keys: ['city center alex', 'city centre alex'] },
+    { name: 'Breadfast Coffee - Green Plaza Alexandria', keys: ['green plaza'] },
+    { name: 'Breadfast Coffee - Hillburton', keys: ['hillburton', 'halliburton'] },
+    { name: 'Breadfast Coffee - Mashreq Bank', keys: ['mashreq'] },
+    { name: 'Breadfast Coffee - Mindhaus', keys: ['Mindhaus'] },
+    { name: 'Breadfast Coffee -poly park', keys: ['poly park', 'polypark'] },
+    { name: 'Breadfast Coffee - Mall Of Arabia', keys: ['mall of arabia'] },
+    { name: 'Breadfast Coffee - Madinaty Strip Zone Drive Thur', keys: ['strip zone'] },
+    { name: 'Breadfast Coffee -East hub madinty', keys: ['east hub'] },
+    { name: 'Breadfast Coffee - Madinaty', keys: ['madinaty', 'madinty'] },
+    { name: 'Breadfast Coffee - B.Tech', keys: ['b.tech', 'btech', 'b tech'] },
+    { name: 'Breadfast Coffee - Smash Club', keys: ['smash'] },
+    { name: 'Breadfast Coffee - Family Park', keys: ['family park'] }
+];
+
+/* ---------- مطابقة اسم الفرع (الكلمة المفتاحية الأطول أولاً) ---------- */
+const RULES = [];
+CUSTOM_BRANCHES.forEach((b, idx) => b.keys.forEach(k => RULES.push({ idx, key: k.toLowerCase() })));
+RULES.sort((a, b) => b.key.length - a.key.length);
+function findBranchIndex(rawName) {
+    const clean = rawName.toLowerCase().replace(/\s+/g, ' ').trim();
+    for (const r of RULES) if (clean.includes(r.key)) return r.idx;
+    return -1;
+}
+
+/* ---------- التجميع ----------
+   rows = [{loc, ref}] من عمودي Destination Location و Reference.
+   أي صف ناقصه الفرع أو رقم الأوردر (الصفوف الرمادي/الفاضية/اللي فيها كلمة واحدة) بيتتجاهل،
+   ورقم الأوردر المتكرر (بسبب تعدد المنتجات) بيتحسب مرة واحدة. */
+const natural = (a, b) => a.localeCompare(b, 'en', { numeric: true });
+function groupOrders(rows) {
+    const matched = CUSTOM_BRANCHES.map(() => new Set());
+    const unmatched = new Map();
+    let skipped = 0, used = 0;
+    rows.forEach(({ loc, ref }) => {
+        loc = String(loc ?? '').trim();
+        ref = String(ref ?? '').trim();
+        if (!loc || !ref || /\(\d+\)\s*$/.test(loc)) { if (loc || ref) skipped++; return; }
+        used++;
+        const idx = findBranchIndex(loc);
+        if (idx !== -1) matched[idx].add(ref);
+        else {
+            if (!unmatched.has(loc)) unmatched.set(loc, new Set());
+            unmatched.get(loc).add(ref);
+        }
+    });
+    return {
+        matched: matched.map(set => [...set].sort(natural)),
+        unmatched: [...unmatched].map(([name, set]) => ({ name, orders: [...set].sort(natural) })),
+        used, skipped
+    };
+}
+
+/* ---------- قراءة الملف ---------- */
+function readRows(buffer) {
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+    const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
+    const head = (data[0] || []).map(h => String(h).trim().toLowerCase());
+    const locCol = head.findIndex(h => h.includes('destination location'));
+    const refCol = head.findIndex(h => h === 'stock moves/reference' || (h.endsWith('/reference') && !h.includes('product')));
+    if (locCol < 0) throw new Error('مش لاقي عمود (Stock Moves/Destination Location).');
+    if (refCol < 0) throw new Error('مش لاقي عمود (Stock Moves/Reference).');
+    return data.slice(1).map(r => ({ loc: r[locCol], ref: r[refCol] }));
+}
+
+/* ---------- بناء ملف الإكسيل ---------- */
+function buildWorkbook(res) {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('تجميع الأوردرات');
+    ws.addRow(['اسم الفرع', 'أرقام الأوردرات']);
+    CUSTOM_BRANCHES.forEach((b, i) => ws.addRow([b.name, res.matched[i].length ? res.matched[i].join('\n') : 0]));
+    if (res.unmatched.length) {
+        ws.addRow(['--- فروع إضافية غير موجودة في الترتيب ---', '']);
+        res.unmatched.forEach(u => ws.addRow([u.name, u.orders.join('\n')]));
+    }
+    ws.getColumn(1).width = 42;
+    ws.getColumn(2).width = 36;
+    ws.eachRow(row => row.eachCell(c => {
+        c.alignment = { vertical: 'middle', wrapText: true };
+        c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    }));
+    ws.getRow(1).eachCell(c => {
+        c.font = { bold: true };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FE' } };
+    });
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    return wb;
+}
+
+/* ---------- الواجهة ---------- */
+let finalBlob = null;
+const $ = id => document.getElementById(id);
+const dropZone = $('dropZone'), fileInput = $('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('border-indigo-500', 'bg-indigo-100'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-indigo-500', 'bg-indigo-100'));
+dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('border-indigo-500', 'bg-indigo-100');
+    if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) processFile(e.target.files[0]); });
+
+function showError(msg) {
+    $('loading').classList.add('hidden'); $('dropContent').classList.remove('hidden');
+    dropZone.style.display = 'none';
+    $('errorMsg').innerText = msg; $('errorBox').classList.remove('hidden');
+}
+function resetTool() {
+    $('errorBox').classList.add('hidden'); $('successBox').classList.add('hidden');
+    $('loading').classList.add('hidden'); $('dropContent').classList.remove('hidden');
+    dropZone.style.display = ''; fileInput.value = ''; finalBlob = null;
+}
+
+function processFile(file) {
+    $('dropContent').classList.add('hidden');
+    $('loading').classList.remove('hidden');
+    const reader = new FileReader();
+    reader.onload = async e => {
+        try {
+            const res = groupOrders(readRows(e.target.result));
+            if (!res.used) return showError('مفيش أي أوردرات صالحة في الشيت.');
+
+            const buffer = await buildWorkbook(res).xlsx.writeBuffer();
+            finalBlob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+            const total = res.matched.reduce((a, o) => a + o.length, 0) + res.unmatched.reduce((a, u) => a + u.orders.length, 0);
+            const withOrders = res.matched.filter(o => o.length).length;
+            $('successDetails').innerHTML = `<b>${total}</b> أوردر &nbsp;|&nbsp; <b>${withOrders}</b> فرع ليه أوردرات من <b>${CUSTOM_BRANCHES.length}</b>` +
+                (res.skipped ? ` &nbsp;|&nbsp; اتجاهلت <b>${res.skipped}</b> صف مش أوردر` : '');
+
+            const warn = $('warnBox');
+            if (res.unmatched.length) {
+                warn.innerHTML = `<b><i class="fa-solid fa-triangle-exclamation ml-1"></i> فيه ${res.unmatched.length} فرع مش متعرّف عليه، اتضافوا في آخر الشيت:</b><br>` +
+                    res.unmatched.map(u => '• ' + u.name.replace(/</g, '&lt;')).join('<br>');
+                warn.classList.remove('hidden');
+            } else warn.classList.add('hidden');
+
+            const tb = $('previewBody'); tb.innerHTML = '';
+            const addRow = (name, n, extra) => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-t border-slate-100' + (n ? '' : ' text-slate-400') + (extra ? ' bg-amber-50' : '');
+                const a = document.createElement('td'); a.className = 'p-2'; a.textContent = name;
+                const b = document.createElement('td'); b.className = 'p-2 text-center font-bold'; b.textContent = n;
+                tr.append(a, b); tb.appendChild(tr);
+            };
+            CUSTOM_BRANCHES.forEach((b, i) => addRow(b.name, res.matched[i].length, false));
+            res.unmatched.forEach(u => addRow(u.name, u.orders.length, true));
+
+            dropZone.style.display = 'none';
+            $('loading').classList.add('hidden');
+            $('successBox').classList.remove('hidden');
+        } catch (err) { showError('حدث خطأ: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function downloadResult() {
+    if (!finalBlob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(finalBlob);
+    a.download = 'Orders_By_Branch_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+</script>
+</body>
+</html>
