@@ -4,8 +4,9 @@ import {
   reauthenticateWithCredential, EmailAuthProvider
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  collection, doc, getDoc, setDoc, writeBatch, serverTimestamp, onSnapshot
+  collection, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { isLive } from "./session.js";
 import { guard, logout, canSee, esc, arErr, toast, normId, validId, makeEmail, initThemeButton } from "./common.js";
 
 const $ = id => document.getElementById(id);
@@ -16,6 +17,8 @@ const user = api.user;
 let tools = [];
 let users = [];
 let usersStarted = false;
+let sessions = {};          // uid -> بيانات الجلسة (للأدمن)
+let devices = {};           // uid -> الجهاز المربوط (للأدمن)
 
 initThemeButton($("btnTheme"));
 
@@ -226,11 +229,14 @@ function renderUsers() {
       <td><span class="mono">${esc(u.employeeId)}</span></td>
       <td>${esc(u.name)} ${you ? '<span class="badge">انت</span>' : ""}</td>
       <td>${roleLabel(u.role)}</td>
-      <td><span class="badge ${u.active ? "ok" : "off"}">${u.active ? "مفعّل" : "محظور"}</span>${u.pending ? ' <span class="badge wait">مستني أول دخول</span>' : ""}</td>
+      <td><span class="badge ${u.active ? "ok" : "off"}">${u.active ? "مفعّل" : "محظور"}</span>${u.pending ? ' <span class="badge wait">مستني أول دخول</span>' : ""}${u.role !== "admin" && u.deviceLock !== false ? (devices[u.uid] ? ` <span class="badge wait" title="الحساب مربوط بالجهاز ده">مربوط: ${esc(devices[u.uid].device || "")}</span>` : ' <span class="badge wait">هيتربط بأول جهاز</span>') : ""}${isLive(sessions[u.uid]) ? ` <span class="badge ok" title="${esc(sessions[u.uid].device || "")}">متصل الآن · ${esc(sessions[u.uid].device || "")}</span>` : ""}</td>
       <td>${access}</td>
       <td><div class="acts">
         <button class="btn ghost sm" data-act="edit" data-uid="${esc(u.uid)}"><i class="fa-solid fa-pen"></i> تعديل</button>
         ${you ? "" : `<button class="btn ${u.active ? "ghost" : ""} sm" data-act="ban" data-uid="${esc(u.uid)}"><i class="fa-solid ${u.active ? "fa-ban" : "fa-lock-open"}"></i> ${u.active ? "حظر" : "إلغاء الحظر"}</button>
+        ${u.role === "admin" ? "" : `<button class="btn ghost sm" data-act="lock" data-uid="${esc(u.uid)}"><i class="fa-solid fa-link${u.deviceLock === false ? "-slash" : ""}"></i> ربط الجهاز: ${u.deviceLock === false ? "إيقاف" : "تشغيل"}</button>`}
+        ${devices[u.uid] ? `<button class="btn ghost sm" data-act="unbind" data-uid="${esc(u.uid)}"><i class="fa-solid fa-link-slash"></i> فك الربط</button>` : ""}
+        ${sessions[u.uid] && sessions[u.uid].closed !== true ? `<button class="btn ghost sm" data-act="kill" data-uid="${esc(u.uid)}"><i class="fa-solid fa-plug-circle-xmark"></i> إنهاء الجلسة</button>` : ""}
         <button class="btn ghost sm" data-act="pw" data-uid="${esc(u.uid)}"><i class="fa-solid fa-key"></i> باسورد</button>
         <button class="btn ghost sm" data-act="del" data-uid="${esc(u.uid)}"><i class="fa-solid fa-trash"></i></button>`}
       </div></td></tr>`;
@@ -244,6 +250,15 @@ function startUsers() {
     users = snap.docs.map(d => ({ uid: d.id, ...d.data() })).sort((a, b) => String(a.employeeId).localeCompare(String(b.employeeId)));
     renderUsers();
   }, err => toast(arErr(err), "err"));
+  onSnapshot(collection(db, "sessions"), snap => {
+    sessions = {}; snap.docs.forEach(d => { sessions[d.id] = d.data(); });
+    renderUsers();
+  }, () => {});
+  onSnapshot(collection(db, "devices"), snap => {
+    devices = {}; snap.docs.forEach(d => { devices[d.id] = d.data(); });
+    renderUsers();
+  }, () => {});
+  setInterval(() => { if (users.length) renderUsers(); }, 30000);   // المؤشر بيتحدث مع الوقت
 }
 
 // بيعمل حساب Firebase جديد من غير ما الأدمن يتسجل خروج
@@ -260,6 +275,7 @@ function cleanUserData(u) {
   const d = { employeeId: u.employeeId, name: u.name, role: u.role, active: u.active, allTools: !!u.allTools, toolIds: u.toolIds || [] };
   if (u.createdAt) d.createdAt = u.createdAt;
   if (u.createdBy) d.createdBy = u.createdBy;
+  if (u.deviceLock === false) d.deviceLock = false;
   return d;
 }
 
@@ -380,6 +396,38 @@ $("usersBody").addEventListener("click", e => {
         await batch.commit();
         toast(pending ? "تم التصفير، الموظف هيختار كلمة مرور جديدة عند الدخول" : "تم تغيير كلمة المرور");
       }
+    });
+  }
+
+  if (b.dataset.act === "unbind") {
+    modal("فك ربط الجهاز", `<p>هتفك ربط <b>${esc(u.name)}</b> من الجهاز <b>${esc((devices[u.uid] || {}).device || "")}</b>. هيتسجّل خروجه فورًا، وأول جهاز يدخل منه بعد كده هو اللي هيتربط بالحساب.</p>`, {
+      submitText: "فك الربط", danger: true,
+      async onSubmit() {
+        await deleteDoc(doc(db, "devices", u.uid));
+        try { await deleteDoc(doc(db, "sessions", u.uid)); } catch (_) {}
+        toast("تم فك الربط");
+      }
+    });
+  }
+
+  if (b.dataset.act === "lock") {
+    const on = u.deviceLock !== false;
+    modal(on ? "إيقاف ربط الجهاز" : "تشغيل ربط الجهاز", on
+      ? `<p>هتوقف الربط الدايم لـ <b>${esc(u.name)}</b>. هيفضل ممنوع يفتح من جهازين في نفس الوقت، بس يقدر يغيّر جهازه براحته.</p>`
+      : `<p>هتشغّل الربط الدايم لـ <b>${esc(u.name)}</b>: أول جهاز يدخل منه بيتربط بالحساب لحد ما تفك الربط.</p>`, {
+      submitText: on ? "إيقاف" : "تشغيل", danger: on,
+      async onSubmit() {
+        await updateDoc(doc(db, "users", u.uid), { deviceLock: !on });
+        if (on) { try { await deleteDoc(doc(db, "devices", u.uid)); } catch (_) {} }
+        toast(on ? "تم إيقاف الربط" : "تم تشغيل الربط");
+      }
+    });
+  }
+
+  if (b.dataset.act === "kill") {
+    modal("إنهاء الجلسة", `<p>هتنهي جلسة <b>${esc(u.name)}</b>. لو كان فاتح الموقع هيتسجّل خروجه فورًا، وبعدها يقدر يدخل من أي جهاز.</p>`, {
+      submitText: "إنهاء الجلسة", danger: true,
+      async onSubmit() { await deleteDoc(doc(db, "sessions", u.uid)); toast("تم إنهاء الجلسة"); }
     });
   }
 
