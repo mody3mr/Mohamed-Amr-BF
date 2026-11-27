@@ -57,6 +57,43 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // قفل الجلسة على جهاز واحد: مستند لكل مستخدم فيه sid عشوائي بيتجدد بنبضة كل 30 ثانية.
+    // جهاز تاني ميقدرش ياخد الجلسة طول ما النبضة أحدث من دقيقتين (120 ثانية) إلا لو الجلسة اتقفلت (تسجيل خروج).
+    function validSess() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['sid', 'device', 'startedAt', 'lastSeen', 'closed'])
+          && d.sid is string && d.sid.size() >= 20 && d.sid.size() <= 64
+          && d.device is string && d.device.size() <= 60
+          && d.lastSeen == request.time
+          && d.closed is bool;
+    }
+    // الربط الدايم بجهاز: أول جهاز يدخل بيتسجّل هنا، وبعدها أي جهاز تاني ميقدرش ياخد جلسة لحد ما الأدمن يمسح المستند ده.
+    // (بيتطبق على المستخدم اللي deviceLock عنده مش false)
+    function devPath()  { return /databases/$(database)/documents/devices/$(request.auth.uid); }
+    function lockOn()   { return me().get('deviceLock', true) == true; }
+    function deviceOk() { return !lockOn() || (existsAfter(devPath()) && getAfter(devPath()).data.sid == request.resource.data.sid); }
+    match /devices/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.keys().hasOnly(['sid', 'device', 'boundAt'])
+                    && request.resource.data.sid is string && request.resource.data.sid.size() >= 20 && request.resource.data.sid.size() <= 64
+                    && request.resource.data.device is string && request.resource.data.device.size() <= 60
+                    && request.resource.data.boundAt == request.time;
+      allow update, delete: if isAdmin();
+    }
+    match /sessions/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid && validSess() && deviceOk();
+      allow update: if isAdmin()
+                    || (signedIn() && request.auth.uid == uid && validSess() && deviceOk()
+                        && (resource.data.sid == request.resource.data.sid
+                            || resource.data.closed == true
+                            || resource.data.lastSeen < request.time - duration.value(120, 's')));
+      allow delete: if isAdmin();
+    }
+
     // بيانات الأدوات (الاسم/الوصف/الأيقونة) - يشوفها أي مستخدم مفعّل
     match /tools/{toolId} {
       allow read: if isAdmin() || (isActive() && !maintenanceOn());
