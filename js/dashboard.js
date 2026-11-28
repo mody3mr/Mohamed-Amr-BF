@@ -4,10 +4,11 @@ import {
   reauthenticateWithCredential, EmailAuthProvider
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  collection, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, onSnapshot
+  collection, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, onSnapshot, query, orderBy, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { isLive } from "./session.js";
-import { guard, logout, canSee, esc, arErr, toast, normId, validId, makeEmail, initThemeButton } from "./common.js";
+import { guard, canSee, esc, arErr, toast, normId, validId, makeEmail, logActivity } from "./common.js";
+import { mountProfile } from "./profile.js";
 
 const $ = id => document.getElementById(id);
 const api = await guard();
@@ -20,7 +21,7 @@ let usersStarted = false;
 let sessions = {};          // uid -> بيانات الجلسة (للأدمن)
 let devices = {};           // uid -> الجهاز المربوط (للأدمن)
 
-initThemeButton($("btnTheme"));
+mountProfile(api);
 
 const ICONS = [
   ["fa-solid fa-table-list", "جدول"], ["fa-solid fa-file-excel", "إكسيل"], ["fa-solid fa-chart-column", "رسم بياني"],
@@ -48,7 +49,12 @@ function modal(title, bodyHtml, { onSubmit, submitText = "حفظ", danger = fals
     const err = form.querySelector("[data-err]");
     err.classList.add("hidden");
     btn.disabled = true;
-    try { await onSubmit(form); close(); }
+    try {
+      await onSubmit(form); close();
+      // سجل النشاط: اسم الإجراء + القيم (من غير أي كلمات مرور أو مفاتيح)
+      const kv = [...new FormData(form).entries()].filter(([k, v]) => typeof v === "string" && v && !/pass|pw|cur|n1|n2|key|secret/i.test(k)).map(([k, v]) => k + "=" + v.slice(0, 40)).join("، ");
+      logActivity("admin", title + (kv ? " | " + kv : ""));
+    }
     catch (ex) {
       err.textContent = ex && ex.code ? arErr(ex) : (ex && ex.message) || "حصل خطأ";
       err.classList.remove("hidden");
@@ -70,7 +76,8 @@ function accessHtml(allTools, ids, sched = "") {
     <div class="checks" data-checks>${list}</div></div>
   <div class="field"><label>دور نظام المواعيد</label><select name="sched">
     <option value="" ${!sched ? "selected" : ""}>مفيش</option>
-    <option value="leader" ${sched === "leader" ? "selected" : ""}>ليدر / مندوب (بيدخل مواعيد فروعه)</option>
+    <option value="leader" ${sched === "leader" ? "selected" : ""}>ليدر (ثابت على عربيات، بيشوف ويبعت لفروعها)</option>
+    <option value="rep" ${sched === "rep" ? "selected" : ""}>مندوب (بيتعيّن على عربية ليوم معيّن)</option>
     <option value="dock" ${sched === "dock" ? "selected" : ""}>مندوب المخزن (مواعيد تحميل العربيات)</option></select></div>`;
 }
 function wireAccess(form) {
@@ -85,6 +92,7 @@ function readAccess(form) {
   };
 }
 function roleLabel(r) { return r === "admin" ? "مسؤول" : "مستخدم"; }
+const SCHED_LABEL = { leader: "ليدر", rep: "مندوب", dock: "مندوب مخزن" };
 const firstName = n => String(n || "").trim().split(/\s+/)[0] || "";
 // مفتاح مؤقت عشوائي بيتستخدم في أول دخول للموظف (بعدها الموظف بيختار كلمة المرور بنفسه)
 function randomKey() {
@@ -95,15 +103,21 @@ function randomKey() {
 /* ------------------------------------------------------------------ tools (لحظي) */
 function schedCards() {
   const c = [];
-  if (isAdmin) c.push(["schedule-admin.html", "fa-solid fa-calendar-check", "إدارة مواعيد الفروع", "العربيات والفروع ومراجعة اللي اتبعت وإرساله للشيت"]);
-  if (me && (me.sched === "leader" || me.sched === "dock" || isAdmin))
-    c.push(["schedule.html", "fa-solid fa-clock", me.sched === "dock" ? "مواعيد تحميل العربيات" : "إدخال مواعيد الفروع", me.sched === "dock" ? "سجّل دخول وخروج العربيات من المخزن" : "سجّل مواعيد وصول وانتهاء فروعك"]);
+  if (isAdmin) c.push(["schedule-admin.html", "fa-solid fa-calendar-check", "إدارة مواعيد الفروع", "العربيات والليدرز والمناديب، ومراجعة اللي اتبعت وإرساله للشيت"]);
+  else if (me && (me.sched === "leader" || me.sched === "rep"))
+    c.push(["schedule.html", "fa-solid fa-clock", "إدخال مواعيد الفروع", me.sched === "leader" ? "عربياتك وفروعها كل يوم، وتابع اللي اتبعت" : "سجّل وإرسال مواعيد فروع عربيتك"]);
+  else if (me && me.sched === "dock")
+    c.push(["schedule.html", "fa-solid fa-truck-ramp-box", "مواعيد تحميل العربيات", "سجّل دخول وخروج العربيات من المخزن"]);
   return c.map(([href, ic, t, p]) => `<a class="tool" href="${href}"><div class="ico"><i class="${ic}"></i></div><h3>${t}</h3><p>${p}</p></a>`).join("");
 }
 function renderTools() {
   const grid = $("toolsGrid");
   const mine = tools.filter(t => canSee(me, t.id));
   renderSheets();
+  // مستخدم عنده شيتات بس ومفيش أدوات متاحة له: نخفي تاب الأدوات ونفتحله الشيتات
+  const sheetOnly = !isAdmin && !!me.sched && !mine.length && tools.length > 0;
+  $("toolsTabBtn").classList.toggle("hidden", sheetOnly);
+  if (sheetOnly && !$("tab-tools").classList.contains("hidden")) $("sheetsTabBtn").click();
   if (!mine.length) {
     grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
       ${isAdmin && !tools.length
@@ -245,7 +259,7 @@ function renderUsers() {
     return `<tr>
       <td><span class="mono">${esc(u.employeeId)}</span></td>
       <td>${esc(u.name)} ${you ? '<span class="badge">انت</span>' : ""}</td>
-      <td>${roleLabel(u.role)}</td>
+      <td>${roleLabel(u.role)}${u.sched ? ` <span class="badge wait">${SCHED_LABEL[u.sched] || ""}</span>` : ""}</td>
       <td><span class="badge ${u.active ? "ok" : "off"}">${u.active ? "مفعّل" : "محظور"}</span>${u.pending ? ' <span class="badge wait">مستني أول دخول</span>' : ""}${u.role !== "admin" && u.deviceLock !== false ? (devices[u.uid] ? ` <span class="badge wait" title="الحساب مربوط بالجهاز ده">مربوط: ${esc(devices[u.uid].device || "")}</span>` : ' <span class="badge wait">هيتربط بأول جهاز</span>') : ""}${isLive(sessions[u.uid]) ? ` <span class="badge ok" title="${esc(sessions[u.uid].device || "")}">متصل الآن · ${esc(sessions[u.uid].device || "")}</span>` : ""}</td>
       <td>${access}</td>
       <td><div class="acts">
@@ -503,26 +517,41 @@ if (isAdmin) {
   api.onSite(renderSite);
 }
 
-/* ------------------------------------------------------------------ my password / logout */
-$("btnPass").onclick = () => modal("تغيير كلمة المرور", `
-  <div class="field"><label>كلمة المرور الحالية</label><input name="cur" type="password" dir="ltr" required autocomplete="current-password"></div>
-  <div class="field"><label>كلمة المرور الجديدة</label><input name="n1" type="password" dir="ltr" minlength="6" required autocomplete="new-password"></div>
-  <div class="field"><label>تأكيد كلمة المرور الجديدة</label><input name="n2" type="password" dir="ltr" minlength="6" required autocomplete="new-password"></div>`, {
-  async onSubmit(form) {
-    if (form.elements.n1.value !== form.elements.n2.value) throw { message: "كلمتا المرور الجديدتان مش متطابقتين." };
-    await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, form.elements.cur.value));
-    await updatePassword(user, form.elements.n1.value);
-    toast("تم تغيير كلمة المرور");
-  }
-});
-$("btnOut").onclick = logout;
+/* ------------------------------------------------------------------ سجل النشاط (أدمن) */
+const TYPE_LABEL = { login: "دخول", logout: "خروج", page: "فتح صفحة", tool: "فتح أداة", upload: "رفع ملف", download: "تحميل ملف", password: "كلمة المرور",
+  admin: "إجراء أدمن", sched: "مواعيد", dock: "مخزن", sheet: "إرسال للشيت" };
+let actStarted = false, actRows = [];
+function startActivity() {
+  if (actStarted || !isAdmin) return;
+  actStarted = true;
+  onSnapshot(query(collection(db, "activity"), orderBy("at", "desc"), limit(500)), snap => {
+    actRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const us = [...new Set(actRows.map(r => r.name))].sort(), ty = [...new Set(actRows.map(r => r.type))].sort();
+    const keep = [$("actUser").value, $("actType").value];
+    $("actUser").innerHTML = '<option value="">كل المستخدمين</option>' + us.map(n => `<option>${esc(n)}</option>`).join("");
+    $("actType").innerHTML = '<option value="">كل الأنواع</option>' + ty.map(t => `<option value="${esc(t)}">${esc(TYPE_LABEL[t] || t)}</option>`).join("");
+    $("actUser").value = keep[0]; $("actType").value = keep[1];
+    renderActivity();
+  }, err => { $("actBody").innerHTML = `<tr><td colspan="5">${esc(arErr(err))}</td></tr>`; });
+  ["actUser", "actType"].forEach(id => $(id).onchange = renderActivity);
+  $("actQ").oninput = renderActivity;
+}
+function renderActivity() {
+  const u = $("actUser").value, t = $("actType").value, q = $("actQ").value.trim().toLowerCase();
+  const rows = actRows.filter(r => (!u || r.name === u) && (!t || r.type === t) && (!q || (r.detail || "").toLowerCase().includes(q)));
+  $("actCnt").textContent = rows.length + " سجل (آخر 500)";
+  $("actBody").innerHTML = rows.map(r => `<tr><td style="white-space:nowrap">${r.at && r.at.toDate ? r.at.toDate().toLocaleString("ar-EG", { timeZone: "Africa/Cairo", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", second: "2-digit" }) : "—"}</td>
+    <td>${esc(r.name)}</td><td><span class="badge wait">${esc(TYPE_LABEL[r.type] || r.type)}</span></td><td style="white-space:normal;min-width:240px">${esc(r.detail || "")}</td><td class="mono">${esc(r.page || "")}</td></tr>`).join("")
+    || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">مفيش سجلات.</td></tr>';
+}
 
 /* ------------------------------------------------------------------ tabs + boot */
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b === btn));
-  ["tools", "sheets", "users", "manage", "prices", "settings"].forEach(n => $("tab-" + n).classList.toggle("hidden", n !== btn.dataset.tab));
+  ["tools", "sheets", "users", "manage", "prices", "activity", "settings"].forEach(n => $("tab-" + n).classList.toggle("hidden", n !== btn.dataset.tab));
   if (btn.dataset.tab === "users") startUsers();
   if (btn.dataset.tab === "prices") openPrices();
+  if (btn.dataset.tab === "activity") startActivity();
 }));
 
 // تاب الأسعار بيتحمّل أول ما تفتحه بس (عشان اللوحة تفضل سريعة)
@@ -537,14 +566,12 @@ async function openPrices() {
 }
 
 // الشاشة بتظهر فورًا من بيانات حسابك، والأدوات بتتحمّل من الكاش وبعدين بتتحدّث لحظيًا
-$("whoName").textContent = me.name;
-$("whoRole").textContent = roleLabel(me.role);
 if (isAdmin) { document.querySelectorAll(".adm").forEach(el => el.classList.remove("hidden")); renderSite(); }
 renderSheets();
 $("boot").classList.add("hidden");
 $("app").classList.remove("hidden");
 
-api.onProfile(p => { me = p; $("whoName").textContent = p.name; renderTools(); if (usersStarted) renderUsers(); });
+api.onProfile(p => { me = p; renderTools(); if (usersStarted) renderUsers(); });
 
 onSnapshot(collection(db, "tools"), snap => {
   tools = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), "ar"));
