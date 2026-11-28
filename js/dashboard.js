@@ -103,8 +103,7 @@ function schedCards() {
 function renderTools() {
   const grid = $("toolsGrid");
   const mine = tools.filter(t => canSee(me, t.id));
-  const extra = schedCards();
-  if (!mine.length && extra) { grid.innerHTML = extra; return; }
+  renderSheets();
   if (!mine.length) {
     grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
       ${isAdmin && !tools.length
@@ -115,7 +114,12 @@ function renderTools() {
   }
   grid.innerHTML = mine.map(t => `<a class="tool" href="tool.html?id=${encodeURIComponent(t.id)}">
       <div class="ico"><i class="${ICON_RE.test(t.icon || "") ? esc(t.icon) : "fa-solid fa-screwdriver-wrench"}"></i></div>
-      <h3>${esc(t.name)}</h3><p>${esc(t.description || "")}</p></a>`).join("") + extra;
+      <h3>${esc(t.name)}</h3><p>${esc(t.description || "")}</p></a>`).join("");
+}
+function renderSheets() {
+  const html = schedCards();
+  $("sheetsTabBtn").classList.toggle("hidden", !html);
+  $("sheetsGrid").innerHTML = html;
 }
 
 async function seedDefault() {
@@ -516,7 +520,7 @@ $("btnOut").onclick = logout;
 /* ------------------------------------------------------------------ tabs + boot */
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b === btn));
-  ["tools", "users", "manage", "prices", "settings"].forEach(n => $("tab-" + n).classList.toggle("hidden", n !== btn.dataset.tab));
+  ["tools", "sheets", "users", "manage", "prices", "settings"].forEach(n => $("tab-" + n).classList.toggle("hidden", n !== btn.dataset.tab));
   if (btn.dataset.tab === "users") startUsers();
   if (btn.dataset.tab === "prices") openPrices();
 }));
@@ -536,6 +540,7 @@ async function openPrices() {
 $("whoName").textContent = me.name;
 $("whoRole").textContent = roleLabel(me.role);
 if (isAdmin) { document.querySelectorAll(".adm").forEach(el => el.classList.remove("hidden")); renderSite(); }
+renderSheets();
 $("boot").classList.add("hidden");
 $("app").classList.remove("hidden");
 
