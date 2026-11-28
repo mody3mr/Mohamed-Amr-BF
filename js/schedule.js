@@ -14,10 +14,16 @@ const me = api.profile, uid = api.user.uid;
 const root = $("root");
 initShell(api);
 
-if (me.role === "admin" && !me.sched) location.replace("schedule-admin.html");
-else if (me.sched === "leader") await leaderApp();
-else if (me.sched === "dock") await dockApp();
-else root.innerHTML = '<div class="empty">مفيش عندك صلاحية على نظام المواعيد. كلّم مسؤول النظام.</div>';
+try {
+  if (me.role === "admin" && !me.sched) location.replace("schedule-admin.html");
+  else if (me.sched === "leader") await leaderApp();
+  else if (me.sched === "dock") await dockApp();
+  else root.innerHTML = '<div class="empty">مفيش عندك صلاحية على نظام المواعيد. كلّم مسؤول النظام.</div>';
+} catch (e) {
+  console.error(e);
+  root.innerHTML = `<div class="msg err">تعذر تحميل البيانات.<br><small dir="ltr">${esc((e && (e.code || e.message)) || "")}</small>
+    ${e && e.code === "permission-denied" ? "<br>غالبًا قواعد Firestore لسه ماتنشرتش من آخر نسخة، أو الإدارة لسه ماحدّدتش دورك. كلّم مسؤول النظام." : ""}</div>`;
+}
 
 /* ------------------------------------------------------------------ مشترك */
 async function loadTrucks() {
@@ -100,7 +106,7 @@ async function leaderApp() {
   function paintEnter() {
     const today = cairoToday();
     const body = $("tabBody");
-    if (!branches.length) { body.innerHTML = '<div class="empty">لسه مفيش فروع متعيّنة ليك. كلّم الإدارة.</div>'; return; }
+    if (!branches.length) { body.innerHTML = '<div class="empty">مفيش فروع متعيّنة عليك لسه. الإدارة هي اللي بتعيّن العربيات والفروع ليك، كلّمهم.</div>'; return; }
     const gs = groups();
     body.innerHTML = `
       <div class="datebar"><label class="dl">اليوم:</label>
