@@ -96,9 +96,11 @@ service cloud.firestore {
 
     // بيانات الأدوات (الاسم/الوصف/الأيقونة) - يشوفها أي مستخدم مفعّل
     // ======================= نظام مواعيد الفروع =======================
+    // الأدوار (users.sched): leader = ليدر ثابت على عربيات (trucks.leaders) | rep = مندوب بيتعيّن على عربية ليوم معيّن (assign) | dock = مندوب مخزن
     function sched()   { return me().get('sched', ''); }
     function okUser()  { return isActive() && !maintenanceOn(); }
     function isLeader(){ return okUser() && sched() == 'leader'; }
+    function isRep()   { return okUser() && sched() == 'rep'; }
     function isDock()  { return okUser() && sched() == 'dock'; }
     function sessPath(){ return /databases/$(database)/documents/sessions/$(request.auth.uid); }
     function sidMatches(s) { return get(sessPath()).data.sid == s && get(sessPath()).data.closed == false; }
@@ -106,30 +108,44 @@ service cloud.firestore {
     function isDay(t)  { return t is string && t.matches('^20[0-9][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'); }
     function mins(t)   { return int(t.split(':')[0]) * 60 + int(t.split(':')[1]); }
     function branchOf(id) { return get(/databases/$(database)/documents/branches/$(id)).data; }
+    function truckOf(id)  { return get(/databases/$(database)/documents/trucks/$(id)).data; }
+    function assignPath(date, truckId) { return /databases/$(database)/documents/assign/$(date + '_' + truckId); }
+    function leaderOf(t) { return isLeader() && request.auth.uid in t.leaders; }
+    function repOf(date, truckId) {
+      return isRep() && exists(assignPath(date, truckId)) && get(assignPath(date, truckId)).data.rep == request.auth.uid;
+    }
 
     match /trucks/{id} {
-      allow read: if isAdmin() || (okUser() && sched() in ['leader', 'dock']);
+      allow read: if isAdmin() || (okUser() && sched() in ['leader', 'rep', 'dock']);
       allow write: if isAdmin();
     }
     match /branches/{id} {
-      allow read: if isAdmin() || isDock() || (isLeader() && request.auth.uid in resource.data.leaders);
+      allow read: if isAdmin() || (okUser() && sched() in ['leader', 'rep', 'dock']);
+      allow write: if isAdmin();
+    }
+    // تعيين مندوب على عربية في يوم (assign/{date}_{truckId}): الأدمن بس يكتب
+    match /assign/{aid} {
+      allow get: if isAdmin() || (okUser() && (resource == null || resource.data.rep == request.auth.uid || leaderOf(truckOf(resource.data.truckId))));
+      allow list: if isAdmin() || (okUser() && resource.data.rep == request.auth.uid);
       allow write: if isAdmin();
     }
 
-    // الليدر بيعمل create بس (مفيش تعديل ولا حذف إلا للأدمن). القواعد بتتأكد من: الفرع معيّن له، الجلسة بتاعته، صيغة الوقت،
-    // ميعاد الفرع الحقيقي، وإن التأخير (أكتر من 30 دقيقة) أو النقص ليه سبب مكتوب.
+    // كل فرع في اليوم له مستند واحد (entries/{date}_{branchId}): أول واحد يبعته (الليدر أو المندوب المعيّن) هو اللي بيتسجّل.
+    // مفيش تعديل ولا مسح غير للأدمن. القواعد بتتأكد من: الصلاحية على العربية، الجلسة، صيغة الوقت، ميعاد الفرع الحقيقي،
+    // وإن التأخير (أكتر من 30 دقيقة) أو النقص ليه سبب مكتوب.
     function entryOk(eid) {
       let d = request.resource.data;
       let b = branchOf(d.branchId);
+      let t = truckOf(b.truckId);
       let late = d.arrival != null && mins(d.arrival) > mins(b.time) + 30;
       let incomplete = d.holiday == false && (d.arrival == null || d.end == null);
-      return isLeader()
-        && d.keys().hasOnly(['date', 'branchId', 'uid', 'arrival', 'end', 'holiday', 'note', 'late', 'schedTime', 'sentAt', 'sid', 'status'])
-        && d.keys().hasAll(['date', 'branchId', 'uid', 'arrival', 'end', 'holiday', 'note', 'late', 'schedTime', 'sentAt', 'sid', 'status'])
-        && d.uid == request.auth.uid
+      return okUser()
+        && ((d.role == 'leader' && leaderOf(t)) || (d.role == 'rep' && repOf(d.date, b.truckId)))
+        && d.keys().hasOnly(['date', 'branchId', 'uid', 'by', 'role', 'arrival', 'end', 'holiday', 'note', 'late', 'schedTime', 'sentAt', 'sid', 'status'])
+        && d.keys().hasAll(['date', 'branchId', 'uid', 'by', 'role', 'arrival', 'end', 'holiday', 'note', 'late', 'schedTime', 'sentAt', 'sid', 'status'])
+        && d.uid == request.auth.uid && d.by == me().name
         && isDay(d.date)
-        && eid == d.date + '_' + d.branchId + '_' + d.uid
-        && request.auth.uid in b.leaders
+        && eid == d.date + '_' + d.branchId
         && d.status == 'sent' && d.sentAt == request.time
         && sidMatches(d.sid)
         && d.holiday is bool
@@ -141,7 +157,11 @@ service cloud.firestore {
         && (!(late || incomplete) || d.note.size() >= 3);
     }
     match /entries/{eid} {
-      allow read: if isAdmin() || (okUser() && resource.data.uid == request.auth.uid);
+      allow get: if isAdmin() || (okUser() && (resource == null
+          || resource.data.uid == request.auth.uid
+          || leaderOf(truckOf(branchOf(resource.data.branchId).truckId))
+          || repOf(resource.data.date, branchOf(resource.data.branchId).truckId)));
+      allow list: if isAdmin() || (okUser() && resource.data.uid == request.auth.uid);
       allow create: if isAdmin() || entryOk(eid);
       allow update, delete: if isAdmin();
     }
@@ -167,6 +187,20 @@ service cloud.firestore {
       allow create: if isAdmin() || dockCreateOk(did);
       allow update: if isAdmin() || dockUpdateOk();
       allow delete: if isAdmin();
+    }
+
+    // سجل النشاط: أي مستخدم مفعّل يسجّل نشاطه هو بس، والأدمن بس اللي يقرا. مفيش تعديل ولا مسح.
+    match /activity/{aid} {
+      allow read: if isAdmin();
+      allow create: if isActive()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'type', 'detail', 'page', 'at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.at == request.time
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80
+        && request.resource.data.type is string && request.resource.data.type.size() <= 30
+        && request.resource.data.detail is string && request.resource.data.detail.size() <= 300
+        && request.resource.data.page is string && request.resource.data.page.size() <= 40;
+      allow update, delete: if false;
     }
 
     // رابط Apps Script والمفتاح السري: للأدمن بس
