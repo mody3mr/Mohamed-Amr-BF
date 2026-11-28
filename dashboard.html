@@ -36,6 +36,7 @@
       <div id="maintBanner" class="banner hidden"><i class="fa-solid fa-triangle-exclamation"></i> وضع الصيانة شغال: المستخدمين العاديين مش شايفين الموقع دلوقتي. الأدمن بس بيدخل.</div>
       <div class="tabs" id="tabs">
         <button class="tab active" data-tab="tools"><i class="fa-solid fa-toolbox"></i> الأدوات</button>
+        <button class="tab hidden" id="sheetsTabBtn" data-tab="sheets"><i class="fa-solid fa-table-list"></i> شيتات</button>
         <button class="tab adm hidden" data-tab="users"><i class="fa-solid fa-users"></i> المستخدمين</button>
         <button class="tab adm hidden" data-tab="manage"><i class="fa-solid fa-screwdriver-wrench"></i> إدارة الأدوات</button>
         <button class="tab adm hidden" data-tab="prices"><i class="fa-solid fa-tags"></i> أسعار المنتجات</button>
@@ -46,6 +47,12 @@
         <h2>أدواتك</h2>
         <p class="sub">اختار الأداة اللي عايز تفتحها.</p>
         <div id="toolsGrid" class="grid"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+      </section>
+
+      <section id="tab-sheets" class="hidden">
+        <h2>شيتات</h2>
+        <p class="sub">أنظمة إدخال البيانات اللي بتتسجّل في الشيتات.</p>
+        <div id="sheetsGrid" class="grid"></div>
       </section>
 
       <section id="tab-users" class="hidden">
