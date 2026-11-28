@@ -223,63 +223,77 @@ async function leaderApp() {
 }
 
 /* ================================================================== مندوب المخزن */
+function durMin(a, b) { const d = toMin(b) - toMin(a); return d < 0 ? d + 1440 : d; }
+function fmtDur(m) { return m >= 60 ? `${Math.floor(m / 60)} س ${m % 60} د` : `${m} د`; }
+
 async function dockApp() {
   const [trucks, bs] = await Promise.all([loadTrucks(), getDocs(collection(db, "branches"))]);
   const branches = bs.docs.map(d => ({ id: d.id, ...d.data() }));
-  let tab = "today", day = cairoToday(), docks = [];
+  let tab = "today", day = cairoToday(), doneDay = cairoToday(), doneAll = false, docks = [];
+  const truckOf = id => trucks.find(t => t.id === id) || { name: "(عربية اتشالت)", loadTime: "" };
 
   async function load() {
     const s = await getDocs(query(collection(db, "docks"), where("date", "==", day)));
     docks = s.docs.map(d => ({ id: d.id, ...d.data() }));
   }
-  async function loadArchived() {
-    const s = await getDocs(query(collection(db, "docks"), where("status", "==", "archived")));
-    return s.docs.map(d => ({ id: d.id, ...d.data() }));
-  }
 
   root.innerHTML = `
     <h2>تحميل العربيات</h2>
-    <p class="sub">العربيات بترتيب ميعاد تحميلها. سجّل وقت دخول كل عربية للمخزن ووقت خروجها.</p>
+    <p class="sub">العربيات بترتيب ميعاد تحميلها. سجّل دخول العربية للمخزن وخروجها، ولما تخرج بتنتقل لوحدها للمكتمل.</p>
     <div class="tabs"><button class="tab" data-t="today"><i class="fa-solid fa-truck-ramp-box"></i> العربيات</button>
       <button class="tab" data-t="done"><i class="fa-solid fa-circle-check"></i> المكتمل</button></div>
     <div id="tabBody"></div>`;
   root.querySelectorAll(".tab").forEach(b => b.onclick = () => { tab = b.dataset.t; paint(); });
   await paint();
 
+  async function paintDone() {
+    const body = $("tabBody"), today = cairoToday();
+    let list;
+    if (doneAll) list = (await getDocs(collection(db, "docks"))).docs.map(d => ({ id: d.id, ...d.data() }));
+    else list = (await getDocs(query(collection(db, "docks"), where("date", "==", doneDay)))).docs.map(d => ({ id: d.id, ...d.data() }));
+    list = list.filter(d => d.outTime).sort((a, b) => b.date.localeCompare(a.date) || String(a.outTime).localeCompare(String(b.outTime)));
+    body.innerHTML = `
+      <div class="datebar"><label class="dl">اليوم:</label>
+        <input type="date" id="doneIn" value="${doneDay}" max="${today}" ${doneAll ? "disabled" : ""}>
+        <span class="dl">${doneAll ? "كل الأيام" : dayLabel(doneDay)}</span>
+        <button class="btn ${doneAll ? "" : "ghost"} sm" id="allBtn">${doneAll ? "عرض يوم واحد" : "عرض كل الأيام"}</button></div>
+      ${list.length ? `<div class="panel"><div class="table-wrap"><table><thead><tr><th>اليوم</th><th>العربية</th><th>ميعاد التحميل</th><th>دخلت</th><th>خرجت</th><th>مدة التحميل</th><th>وقت التسجيل</th></tr></thead><tbody>
+        ${list.map(d => { const t = truckOf(d.truckId);
+          return `<tr><td>${dayLabel(d.date)}</td><td>${esc(t.name)}</td><td>${fmt12(t.loadTime)}</td><td><b>${fmt12(d.inTime)}</b></td><td><b>${fmt12(d.outTime)}</b></td>
+          <td>${fmtDur(durMin(d.inTime, d.outTime))}</td><td>${tsLabel(d.sentAt)}</td></tr>`; }).join("")}
+        </tbody></table></div></div>` : '<div class="empty">مفيش عربيات اتحمّلت في الفترة دي.</div>'}`;
+    const di = $("doneIn");
+    di.onchange = e => { doneDay = e.target.value || today; paint(); };
+    $("allBtn").onclick = () => { doneAll = !doneAll; paint(); };
+  }
+
   async function paint() {
     root.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.t === tab));
     const body = $("tabBody");
-    if (tab === "done") {
-      const list = (await loadArchived()).sort((a, b) => b.date.localeCompare(a.date));
-      body.innerHTML = list.length ? `<div class="panel"><div class="table-wrap"><table><thead><tr><th>اليوم</th><th>العربية</th><th>دخول</th><th>خروج</th><th>وقت التسجيل</th></tr></thead><tbody>
-        ${list.map(d => { const t = trucks.find(x => x.id === d.truckId) || { name: "(عربية اتشالت)" };
-          return `<tr><td>${dayLabel(d.date)}</td><td>${esc(t.name)}</td><td>${fmt12(d.inTime)}</td><td>${fmt12(d.outTime)}</td><td>${tsLabel(d.sentAt)}</td></tr>`; }).join("")}
-        </tbody></table></div></div>` : '<div class="empty">مفيش حاجة مكتملة لسه.</div>';
-      return;
-    }
+    if (tab === "done") return paintDone();
     await load();
     const today = cairoToday();
-    const pending = trucks.filter(t => !docks.find(d => d.truckId === t.id));
+    const loaded = docks.filter(d => d.outTime).length;
+    const pending = trucks.filter(t => { const d = docks.find(x => x.truckId === t.id); return !d || !d.outTime; });
     body.innerHTML = `
       <div class="datebar"><label class="dl">اليوم:</label>
         <input type="date" id="dayIn" value="${day}" min="${addDays(today, -7)}" max="${today}">
         <span class="dl">${dayLabel(day)}</span></div>
       <div class="msg ${pending.length ? "info" : "okm"}">${pending.length
         ? `لسه <b>${pending.length}</b> عربيات ماتحملتش: ${pending.map(t => esc(t.name)).join("، ")}`
-        : "كل العربيات اتسجّلت ✓"}</div>
-      ${trucks.map(t => {
+        : "كل العربيات اتحمّلت ✓"}${loaded ? ` — اتحمّل <b>${loaded}</b> وانتقلوا للمكتمل` : ""}</div>
+      ${pending.map(t => {
         const d = docks.find(x => x.truckId === t.id);
         const brs = branches.filter(b => b.truckId === t.id).sort(byOrder).map(b => esc(b.name)).join("، ");
         return `<div class="dcard" data-t="${t.id}">
           <h4><i class="fa-solid fa-truck"></i> ${esc(t.name)} <small class="mini">ميعاد التحميل ${fmt12(t.loadTime)}</small>
-            ${d ? (d.outTime ? '<span class="badge ok">اتحمّلت</span>' : '<span class="badge wait">جوه المخزن</span>') : '<span class="badge late">لسه</span>'}</h4>
+            ${d ? '<span class="badge wait">جوه المخزن</span>' : '<span class="badge late">لسه</span>'}</h4>
           <div class="brs">الفروع: ${brs || "—"}</div>
           ${!d ? `<label>دخول المخزن ${timeField("in")}</label> <button class="btn sm" data-act="in">تسجيل الدخول</button>`
             : `<div>دخلت <b>${fmt12(d.inTime)}</b> <span class="mini">(اتسجّلت ${tsLabel(d.sentAt)})</span></div>
-               ${d.outTime ? `<div>خرجت <b>${fmt12(d.outTime)}</b></div>`
-                 : `<div style="margin-top:8px"><label>خروج من المخزن ${timeField("out")}</label> <button class="btn sm" data-act="out">تسجيل الخروج</button></div>`}`}
+               <div style="margin-top:8px"><label>خروج من المخزن ${timeField("out")}</label> <button class="btn sm" data-act="out">تسجيل الخروج</button></div>`}
         </div>`;
-      }).join("") || '<div class="empty">الإدارة لسه ماضافتش عربيات.</div>'}`;
+      }).join("") || (trucks.length ? "" : '<div class="empty">الإدارة لسه ماضافتش عربيات.</div>')}`;
     $("dayIn").onchange = e => { day = e.target.value || today; paint(); };
     body.querySelectorAll("[data-act]").forEach(btn => btn.onclick = async () => {
       const card = btn.closest(".dcard"), tid = card.dataset.t;
@@ -290,7 +304,7 @@ async function dockApp() {
         const ref = doc(db, "docks", `${day}_${tid}`);
         if (btn.dataset.act === "in") await setDoc(ref, { date: day, truckId: tid, uid, inTime: val, outTime: null, sentAt: serverTimestamp(), sid: getSid(), status: "sent" });
         else await updateDoc(ref, { outTime: val, outAt: serverTimestamp(), outSid: getSid() });
-        toast("اتسجّل ✓"); paint();
+        toast(btn.dataset.act === "out" ? "اتحمّلت ✓ وانتقلت للمكتمل" : "اتسجّل ✓"); paint();
       } catch (e) { btn.disabled = false; toast(e && e.code === "permission-denied" ? "اترفض: العربية دي اتسجّلت قبل كده. حدّث الصفحة." : arErr(e), "err"); }
     });
   }
