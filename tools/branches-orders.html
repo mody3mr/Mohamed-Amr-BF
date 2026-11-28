@@ -314,5 +314,15 @@ function downloadResult() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 </script>
+<script>
+/* تتبّع النشاط: بيبلّغ الصفحة الأم برفع/تحميل الملفات (بيتسجّل في سجل النشاط) */
+(function(){
+  function say(a,d){try{parent.postMessage({type:'bf-activity',action:a,detail:String(d||'').slice(0,120)},'*')}catch(e){}}
+  var c=HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click=function(){try{if(this.download)say('download',this.download)}catch(e){}return c.apply(this,arguments)};
+  document.addEventListener('change',function(e){var t=e.target;if(t&&t.type==='file'&&t.files&&t.files[0])say('upload',t.files[0].name)},true);
+  document.addEventListener('drop',function(e){var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];if(f)say('upload',f.name)},true);
+})();
+</script>
 </body>
 </html>
