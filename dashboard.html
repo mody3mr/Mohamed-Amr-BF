@@ -17,6 +17,7 @@
   <link rel="modulepreload" href="js/dashboard.js">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -24,22 +25,27 @@
 
   <div id="app" class="page hidden">
     <div class="topbar">
-      <div class="brand"><i class="fa-solid fa-layer-group"></i> بوابة أدوات Odoo</div>
+      <a class="brand" href="dashboard.html" style="color:inherit"><img class="logo" src="assets/logo.png" alt=""><span>بوابة أدوات Odoo</span></a>
       <div class="sp"></div>
-      <div class="who"><i class="fa-solid fa-circle-user"></i><span class="nm" id="whoName"></span><span class="badge" id="whoRole"></span></div>
       <button class="btn ghost sm icon" id="btnTheme" type="button"></button>
-      <button class="btn ghost sm" id="btnPass"><i class="fa-solid fa-key"></i> كلمة المرور</button>
-      <button class="btn ghost sm" id="btnOut"><i class="fa-solid fa-right-from-bracket"></i> خروج</button>
+      <div class="profile" id="profile">
+        <button class="pf-btn" id="pfBtn" type="button"><span class="pf-txt"><b id="whoName"></b><small id="whoRole"></small></span><span class="av" id="pfAv"></span></button>
+        <div class="pf-menu hidden" id="pfMenu">
+          <button type="button" id="pfSettings"><i class="fa-solid fa-gear"></i> الإعدادات</button>
+          <button type="button" class="red" id="btnOut"><i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج</button>
+        </div>
+      </div>
     </div>
 
     <div class="container grow" style="width:100%">
       <div id="maintBanner" class="banner hidden"><i class="fa-solid fa-triangle-exclamation"></i> وضع الصيانة شغال: المستخدمين العاديين مش شايفين الموقع دلوقتي. الأدمن بس بيدخل.</div>
       <div class="tabs" id="tabs">
-        <button class="tab active" data-tab="tools"><i class="fa-solid fa-toolbox"></i> الأدوات</button>
+        <button class="tab active" id="toolsTabBtn" data-tab="tools"><i class="fa-solid fa-toolbox"></i> الأدوات</button>
         <button class="tab hidden" id="sheetsTabBtn" data-tab="sheets"><i class="fa-solid fa-table-list"></i> شيتات</button>
         <button class="tab adm hidden" data-tab="users"><i class="fa-solid fa-users"></i> المستخدمين</button>
         <button class="tab adm hidden" data-tab="manage"><i class="fa-solid fa-screwdriver-wrench"></i> إدارة الأدوات</button>
         <button class="tab adm hidden" data-tab="prices"><i class="fa-solid fa-tags"></i> أسعار المنتجات</button>
+        <button class="tab adm hidden" data-tab="activity"><i class="fa-solid fa-clock-rotate-left"></i> سجل النشاط</button>
         <button class="tab adm hidden" data-tab="settings"><i class="fa-solid fa-sliders"></i> إعدادات الموقع</button>
       </div>
 
@@ -82,6 +88,18 @@
             <tbody id="toolsBody"></tbody>
           </table></div>
         </div>
+      </section>
+
+      <section id="tab-activity" class="hidden">
+        <h2>سجل النشاط</h2>
+        <p class="sub">كل اللي بيحصل على الموقع: دخول وخروج وفتح أدوات ورفع وتحميل ملفات وإرسال مواعيد وإجراءات الأدمن. بيظهر لمسؤول النظام بس.</p>
+        <div class="datebar">
+          <select id="actUser" style="padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:transparent"><option value="">كل المستخدمين</option></select>
+          <select id="actType" style="padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:transparent"><option value="">كل الأنواع</option></select>
+          <input id="actQ" placeholder="بحث في التفاصيل..." style="padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:transparent;min-width:200px">
+          <span class="mini" id="actCnt"></span>
+        </div>
+        <div class="panel"><div class="table-wrap"><table><thead><tr><th>الوقت</th><th>المستخدم</th><th>النوع</th><th>التفاصيل</th><th>الصفحة</th></tr></thead><tbody id="actBody"></tbody></table></div></div>
       </section>
 
       <section id="tab-prices" class="hidden"><div id="pricesRoot"></div></section>
