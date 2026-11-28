@@ -128,10 +128,12 @@ async function backupAll(kind) {
   }
   toast("اتنزّلت النسخة الاحتياطية ✓");
 }
-const guarded = fn => async ev => {
-  const b = ev.currentTarget; b.disabled = true;
-  try { await fn(); } catch (e) { toast(e.message || arErr(e), "err"); } finally { b.disabled = false; }
-};
+function guarded(fn) {     // function declaration (مرفوعة لفوق) لأن paint() بتتنادى قبل الوصول لهذا السطر
+  return async ev => {
+    const b = ev.currentTarget; b.disabled = true;
+    try { await fn(); } catch (e) { toast(e.message || arErr(e), "err"); } finally { b.disabled = false; }
+  };
+}
 
 /* ================================================================== العربيات والفروع */
 function paintSetup() {
