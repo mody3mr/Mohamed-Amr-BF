@@ -1,6 +1,6 @@
 import { db } from "./firebase.js";
 import { doc, getDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { guard, canSee, esc, arErr, initThemeButton, getTheme } from "./common.js";
+import { guard, canSee, esc, arErr, initThemeButton, getTheme, logActivity } from "./common.js";
 import { unpackText } from "./prices-core.js";
 
 const $ = id => document.getElementById(id);
@@ -45,7 +45,11 @@ function startPrices() {
   }, () => { latestPrices = { type: "prices", error: true }; postPrices(); });
 }
 window.addEventListener("message", e => {
-  if (e.source === frame.contentWindow && e.data && e.data.type === "need-prices") startPrices();
+  if (e.source !== frame.contentWindow || !e.data) return;
+  if (e.data.type === "need-prices") startPrices();
+  // سجل النشاط: الأداة بتبلّغ برفع/تحميل ملف
+  if (e.data.type === "bf-activity" && (e.data.action === "upload" || e.data.action === "download") && tool)
+    logActivity(e.data.action, tool.name + ": " + String(e.data.detail || "").slice(0, 120));
 });
 
 // لو صلاحية الأداة اتشالت منك وانت فاتحها
@@ -59,6 +63,7 @@ try {
   if (!canSee(api.profile, id)) throw { message: "مفيش عندك صلاحية لفتح الأداة دي." };
 
   document.title = tool.name + " | بوابة أدوات Odoo";
+  logActivity("tool", "فتح أداة: " + tool.name);
   $("toolName").textContent = tool.name;
   if (/^fa-[a-z]+ fa-[a-z0-9-]+$/.test(tool.icon || "")) $("toolIcon").className = tool.icon;
 
