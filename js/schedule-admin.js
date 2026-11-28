@@ -46,6 +46,7 @@ root.innerHTML = `
   <p class="sub">عرّف العربيات والفروع، راجع اللي الليدرز بعتوه، وابعته للشيت.</p>
   <div class="tabs">
     <button class="tab" data-t="review"><i class="fa-solid fa-list-check"></i> مراجعة اليوم</button>
+    <button class="tab" data-t="dockrep"><i class="fa-solid fa-warehouse"></i> تقرير المخزن</button>
     <button class="tab" data-t="setup"><i class="fa-solid fa-truck"></i> العربيات والفروع</button>
     <button class="tab" data-t="bridge"><i class="fa-solid fa-table"></i> ربط الشيت</button>
   </div><div id="tabBody"></div>`;
@@ -54,7 +55,7 @@ paint();
 
 function paint() {
   root.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.t === tab));
-  if (tab === "review") paintReview(); else if (tab === "setup") paintSetup(); else paintBridge();
+  if (tab === "review") paintReview(); else if (tab === "setup") paintSetup(); else if (tab === "dockrep") paintDockReport(); else paintBridge();
 }
 
 /* ================================================================== تصدير / نسخ احتياطي */
@@ -424,6 +425,72 @@ async function sendToSheet() {
     btn.disabled = false;
     message(box, "تعذر قراءة رد الشيت. افتح الشيت وتأكد لو البيانات اتكتبت قبل ما تبعت تاني. " + esc(e.message || ""), "err");
   }
+}
+
+/* ================================================================== تقرير المخزن (دخول/خروج العربيات) */
+let repFrom = null, repTo = cairoToday(), repTruck = "";
+function durMin(a, b) { const d = toMin(b) - toMin(a); return d < 0 ? d + 1440 : d; }
+function fmtDur(m) { return m >= 60 ? `${Math.floor(m / 60)} س ${m % 60} د` : `${m} د`; }
+function shiftDay(iso, n) { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+let repRows = [];
+function repData() {
+  return repRows.filter(d => !repTruck || d.truckId === repTruck).sort((a, b) => b.date.localeCompare(a.date) || (T(a.truckId) ? String(T(a.truckId).loadTime) : "").localeCompare(T(b.truckId) ? String(T(b.truckId).loadTime) : ""))
+    .map(d => { const t = T(d.truckId) || { name: "(عربية اتشالت)", loadTime: "" };
+      return { d, t, dur: d.outTime ? durMin(d.inTime, d.outTime) : null, diff: t.loadTime ? toMin(d.inTime) - toMin(t.loadTime) : null }; });
+}
+async function paintDockReport() {
+  if (!repFrom) repFrom = shiftDay(repTo, -6);
+  $("tabBody").innerHTML = `
+    <div class="datebar"><label class="dl">من:</label><input type="date" id="rpFrom" value="${repFrom}">
+      <label class="dl">إلى:</label><input type="date" id="rpTo" value="${repTo}">
+      <label class="dl">العربية:</label><select id="rpTruck" style="padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:transparent">
+        <option value="">كل العربيات</option>${trucks.map(t => `<option value="${t.id}" ${repTruck === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+      <div class="grow-sp"></div>
+      <button class="btn ghost" id="rpXlsx"><i class="fa-solid fa-file-excel"></i> تصدير إكسيل</button></div>
+    <div id="rpBody"><div class="empty">جاري التحميل...</div></div>`;
+  const reload = async () => {
+    repFrom = $("rpFrom").value || repFrom; repTo = $("rpTo").value || repTo; repTruck = $("rpTruck").value;
+    if (repFrom > repTo) { [repFrom, repTo] = [repTo, repFrom]; $("rpFrom").value = repFrom; $("rpTo").value = repTo; }
+    $("rpBody").innerHTML = '<div class="empty">جاري التحميل...</div>';
+    try {
+      const s = await getDocs(query(collection(db, "docks"), where("date", ">=", repFrom), where("date", "<=", repTo)));
+      repRows = s.docs.map(x => ({ id: x.id, ...x.data() }));
+      renderRep();
+    } catch (e) { $("rpBody").innerHTML = `<div class="msg err">${esc(arErr(e))}</div>`; }
+  };
+  ["rpFrom", "rpTo", "rpTruck"].forEach(id => $(id).onchange = reload);
+  $("rpXlsx").onclick = guarded(exportDockRep);
+  await reload();
+}
+function renderRep() {
+  const rows = repData(), done = rows.filter(r => r.dur != null);
+  const avg = done.length ? Math.round(done.reduce((a, r) => a + r.dur, 0) / done.length) : null;
+  const late = rows.filter(r => r.diff != null && r.diff > 30).length;
+  // ملخص لكل عربية (لما نعرض أكتر من عربية)
+  const per = trucks.filter(t => !repTruck || t.id === repTruck).map(t => {
+    const rs = rows.filter(r => r.d.truckId === t.id), dn = rs.filter(r => r.dur != null);
+    return { t, n: rs.length, avg: dn.length ? Math.round(dn.reduce((a, r) => a + r.dur, 0) / dn.length) : null,
+      avgDiff: rs.filter(r => r.diff != null).length ? Math.round(rs.reduce((a, r) => a + (r.diff || 0), 0) / rs.filter(r => r.diff != null).length) : null };
+  }).filter(x => x.n);
+  $("rpBody").innerHTML = rows.length ? `
+    <div class="msg info">عدد التسجيلات: <b>${rows.length}</b> — خرجت منهم: <b>${done.length}</b>${avg != null ? ` — متوسط مدة التحميل: <b>${fmtDur(avg)}</b>` : ""} — دخول متأخر عن الميعاد (أكتر من 30 د): <b>${late}</b></div>
+    ${per.length > 1 ? `<div class="panel" style="margin-bottom:16px"><div class="panel-head"><b>ملخص لكل عربية</b></div><div class="table-wrap"><table><thead><tr><th>العربية</th><th>عدد المرات</th><th>متوسط مدة التحميل</th><th>متوسط الفرق عن الميعاد</th></tr></thead><tbody>
+      ${per.map(x => `<tr><td>${esc(x.t.name)}</td><td>${x.n}</td><td>${x.avg != null ? fmtDur(x.avg) : "—"}</td><td>${x.avgDiff == null ? "—" : x.avgDiff > 0 ? `متأخر ${x.avgDiff} د` : x.avgDiff < 0 ? `بدري ${-x.avgDiff} د` : "في الميعاد"}</td></tr>`).join("")}</tbody></table></div></div>` : ""}
+    <div class="panel"><div class="table-wrap"><table><thead><tr><th>اليوم</th><th>العربية</th><th>ميعاد التحميل</th><th>دخلت</th><th>الفرق عن الميعاد</th><th>خرجت</th><th>مدة التحميل</th><th>بواسطة / وقت التسجيل</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${dayLabel(r.d.date)}</td><td>${esc(r.t.name)}</td><td>${fmt12(r.t.loadTime)}</td><td><b>${fmt12(r.d.inTime)}</b></td>
+      <td>${r.diff == null ? "—" : r.diff > 30 ? `<span class="badge late">متأخر ${r.diff} د</span>` : r.diff > 0 ? `${r.diff} د` : r.diff < 0 ? `<span class="badge early">بدري ${-r.diff} د</span>` : "في الميعاد"}</td>
+      <td>${r.d.outTime ? `<b>${fmt12(r.d.outTime)}</b>` : '<span class="badge wait">لسه جوه</span>'}</td><td>${r.dur != null ? fmtDur(r.dur) : "—"}</td>
+      <td>${esc(uname(r.d.uid))} <span class="mini">${tsLabel(r.d.sentAt)}</span></td></tr>`).join("")}
+    </tbody></table></div></div>` : '<div class="empty">مفيش تسجيلات مخزن في الفترة والعربية دي.</div>';
+}
+async function exportDockRep() {
+  const X = await loadXLSX();
+  const rows = [["Date", "Truck", "Load time", "In", "Diff vs load time (min)", "Out", "Duration (min)", "By", "Sent at"],
+    ...repData().map(r => [r.d.date, r.t.name, hm(r.t.loadTime), hm(r.d.inTime), r.diff == null ? "" : r.diff, hm(r.d.outTime), r.dur == null ? "" : r.dur, uname(r.d.uid), cairoStr(r.d.sentAt)])];
+  const wb = X.utils.book_new();
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(rows), "Dock report");
+  save(new Blob([X.write(wb, { bookType: "xlsx", type: "array" })], { type: "application/octet-stream" }), `Dock_report_${repFrom}_${repTo}.xlsx`);
+  toast("اتنزّل التقرير ✓");
 }
 
 /* ================================================================== ربط الشيت */
