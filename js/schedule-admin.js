@@ -57,17 +57,96 @@ function paint() {
   if (tab === "review") paintReview(); else if (tab === "setup") paintSetup(); else paintBridge();
 }
 
+/* ================================================================== تصدير / نسخ احتياطي */
+let xlsxP = null;
+const loadXLSX = () => window.XLSX ? Promise.resolve(window.XLSX) : (xlsxP || (xlsxP = new Promise((res, rej) => {
+  const s = document.createElement("script");
+  s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+  s.onload = () => res(window.XLSX); s.onerror = () => { xlsxP = null; rej(new Error("تعذر تحميل مكتبة الإكسيل، اتأكد من النت.")); };
+  document.head.appendChild(s);
+})));
+const cairoStr = ts => ts && ts.toDate ? ts.toDate().toLocaleString("en-GB", { timeZone: "Africa/Cairo" }) : "";
+const isoStr = ts => ts && ts.toDate ? ts.toDate().toISOString() : null;
+function save(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+const statusText = e => !e ? "لم يُرسل" : e.holiday ? "إجازة" : !e.arrival ? "ناقص"
+  : isLate(e.arrival, e.schedTime) ? `متأخر +${lateBy(e.arrival, e.schedTime)}د` : toMin(e.arrival) < toMin(e.schedTime) ? "بدري" : "في الميعاد";
+const hm = t => (t || "");
+
+// إكسيل لليوم المعروض: بنفس ترتيب شيت End To End (عربية > فروع) عشان تقدر تكمل منه يدوي لو الشيت وقع
+async function exportDayXlsx() {
+  const X = await loadXLSX();
+  const rows = [["Truck", "In Docks", "Out Docks", "Fps Store Name", "Arrival Schedule", "Arrival time", "End time", "Status", "Comment", "Leader", "Sent at"]];
+  trucks.forEach(t => {
+    const d = docks.find(x => x.truckId === t.id);
+    branches.filter(b => b.truckId === t.id).sort(byOrder).forEach((b, i) => {
+      const { off } = officialOf(b);
+      rows.push([i === 0 ? t.name : "", i === 0 && d ? hm(d.inTime) : "", i === 0 && d ? hm(d.outTime) : "", b.sheetName || b.name, hm(b.time),
+        off ? (off.holiday ? 0 : hm(off.arrival)) : "", off ? (off.holiday ? 0 : hm(off.end)) : "", statusText(off),
+        off && off.late ? off.note || "" : "", off ? uname(off.uid) : "", off ? cairoStr(off.sentAt) : ""]);
+    });
+  });
+  const all = [["Branch", "Truck", "Leader", "Official", "Holiday", "Arrival schedule", "Arrival", "End", "Status", "Note", "Sent at", "Archived"]];
+  entries.forEach(e => { const b = B(e.branchId) || {}; all.push([b.sheetName || b.name || e.branchId, (T(b.truckId) || {}).name || "", uname(e.uid),
+    officialOf(b).off === e ? "yes" : "no", e.holiday ? "yes" : "", hm(e.schedTime), hm(e.arrival), hm(e.end), statusText(e), e.note || "", cairoStr(e.sentAt), e.status === "archived" ? "yes" : ""]); });
+  const dk = [["Truck", "In", "Out", "By", "Sent at"]];
+  docks.forEach(d => dk.push([(T(d.truckId) || {}).name || d.truckId, hm(d.inTime), hm(d.outTime), uname(d.uid), cairoStr(d.sentAt)]));
+  const wb = X.utils.book_new();
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(rows), tabName(day).replace("/", "-"));
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(all), "All entries");
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(dk), "Docks");
+  save(new Blob([X.write(wb, { bookType: "xlsx", type: "array" })], { type: "application/octet-stream" }), `Schedule_${day}.xlsx`);
+  toast("اتنزّل ملف الإكسيل ✓");
+}
+
+// نسخة احتياطية كاملة (كل الأيام): إكسيل للقراءة + JSON للاحتفاظ بالبيانات
+async function backupAll(kind) {
+  const [e, d] = await Promise.all([getDocs(collection(db, "entries")), getDocs(collection(db, "docks"))]);
+  const ents = e.docs.map(x => ({ id: x.id, ...x.data() })), dks = d.docs.map(x => ({ id: x.id, ...x.data() }));
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+  if (kind === "json") {
+    const clean = o => { const r = {}; Object.entries(o).forEach(([k, v]) => { r[k] = v && v.toDate ? isoStr(v) : v; }); return r; };
+    const data = { app: "branch-schedule", exportedAt: new Date().toISOString(), trucks: trucks.map(clean), branches: branches.map(clean),
+      leaders: users.filter(u => u.sched).map(u => ({ uid: u.uid, name: u.name, empId: u.employeeId || null, sched: u.sched })), entries: ents.map(clean), docks: dks.map(clean) };
+    save(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }), `schedule-backup-${stamp}.json`);
+  } else {
+    const X = await loadXLSX();
+    const wb = X.utils.book_new();
+    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([["Truck", "Load time", "Leaders", "Primary"],
+      ...trucks.map(t => [t.name, hm(t.loadTime), (t.leaders || []).map(uname).join(", "), t.primary ? uname(t.primary) : ""])]), "Trucks");
+    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([["Branch", "Name in sheet", "Truck", "Arrival schedule", "Order", "Leaders", "Primary"],
+      ...branches.map(b => [b.name, b.sheetName || "", (T(b.truckId) || {}).name || "", hm(b.time), b.order || 0, (b.leaders || []).map(uname).join(", "), b.primary ? uname(b.primary) : ""])]), "Branches");
+    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([["Date", "Branch", "Truck", "Leader", "Holiday", "Arrival schedule", "Arrival", "End", "Status", "Note", "Sent at", "Archived"],
+      ...ents.sort((a, b) => a.date.localeCompare(b.date)).map(x => { const b = B(x.branchId) || {}; return [x.date, b.sheetName || b.name || x.branchId, (T(b.truckId) || {}).name || "",
+        uname(x.uid), x.holiday ? "yes" : "", hm(x.schedTime), hm(x.arrival), hm(x.end), statusText(x), x.note || "", cairoStr(x.sentAt), x.status === "archived" ? "yes" : ""]; })]), "Entries");
+    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([["Date", "Truck", "In", "Out", "By", "Sent at"],
+      ...dks.sort((a, b) => a.date.localeCompare(b.date)).map(x => [x.date, (T(x.truckId) || {}).name || x.truckId, hm(x.inTime), hm(x.outTime), uname(x.uid), cairoStr(x.sentAt)])]), "Docks");
+    save(new Blob([X.write(wb, { bookType: "xlsx", type: "array" })], { type: "application/octet-stream" }), `schedule-backup-${stamp}.xlsx`);
+  }
+  toast("اتنزّلت النسخة الاحتياطية ✓");
+}
+const guarded = fn => async ev => {
+  const b = ev.currentTarget; b.disabled = true;
+  try { await fn(); } catch (e) { toast(e.message || arErr(e), "err"); } finally { b.disabled = false; }
+};
+
 /* ================================================================== العربيات والفروع */
 function paintSetup() {
   const leaders = users.filter(u => u.sched === "leader");
   $("tabBody").innerHTML = `
   <div class="panel" style="margin-bottom:18px"><div class="panel-head"><div><b>العربيات</b><div class="mini">ترتيبها في صفحة مندوب المخزن بحسب ميعاد التحميل</div></div><div class="sp"></div>
     <button class="btn sm" id="btnTruck"><i class="fa-solid fa-plus"></i> عربية جديدة</button>
-    <button class="btn ghost sm" id="btnImport"><i class="fa-solid fa-file-import"></i> استيراد جماعي</button></div>
-    <div class="table-wrap"><table><thead><tr><th>العربية</th><th>ميعاد التحميل</th><th>عدد الفروع</th><th>إجراءات</th></tr></thead><tbody>
+    <button class="btn ghost sm" id="btnImport"><i class="fa-solid fa-file-import"></i> استيراد جماعي</button>
+    <button class="btn ghost sm" id="btnBkX"><i class="fa-solid fa-file-excel"></i> نسخة احتياطية (Excel)</button>
+    <button class="btn ghost sm" id="btnBkJ"><i class="fa-solid fa-file-code"></i> نسخة احتياطية (JSON)</button></div>
+    <div class="table-wrap"><table><thead><tr><th>العربية</th><th>ميعاد التحميل</th><th>عدد الفروع</th><th>الليدرز (على كل فروعها)</th><th>إجراءات</th></tr></thead><tbody>
     ${trucks.map(t => `<tr><td>${esc(t.name)}</td><td>${fmt12(t.loadTime)}</td><td>${branches.filter(b => b.truckId === t.id).length}</td>
-      <td><div class="acts"><button class="btn ghost sm" data-a="et" data-id="${t.id}">تعديل</button><button class="btn ghost sm" data-a="dt" data-id="${t.id}">مسح</button></div></td></tr>`).join("")
-      || '<tr><td colspan="4" style="text-align:center;color:var(--muted)">مفيش عربيات لسه</td></tr>'}</tbody></table></div></div>
+      <td style="white-space:normal">${(t.leaders || []).map(l => `${esc(uname(l))}${l === t.primary ? " ★" : ""}`).join("، ") || "—"}</td>
+      <td><div class="acts"><button class="btn sm" data-a="lt" data-id="${t.id}"><i class="fa-solid fa-user-check"></i> تعيين ليدرز</button><button class="btn ghost sm" data-a="et" data-id="${t.id}">تعديل</button><button class="btn ghost sm" data-a="dt" data-id="${t.id}">مسح</button></div></td></tr>`).join("")
+      || '<tr><td colspan="5" style="text-align:center;color:var(--muted)">مفيش عربيات لسه</td></tr>'}</tbody></table></div></div>
 
   <div class="panel"><div class="panel-head"><div><b>الفروع</b><div class="mini">الاسم في الشيت لازم يكون زي عمود Fps Store Name بالظبط</div></div><div class="sp"></div>
     <button class="btn sm" id="btnBranch"><i class="fa-solid fa-plus"></i> فرع جديد</button></div>
@@ -83,9 +162,12 @@ function paintSetup() {
   $("btnTruck").onclick = () => truckModal();
   $("btnBranch").onclick = () => branchModal();
   $("btnImport").onclick = importModal;
+  $("btnBkX").onclick = guarded(() => backupAll("xlsx"));
+  $("btnBkJ").onclick = guarded(() => backupAll("json"));
   $("tabBody").querySelectorAll("[data-a]").forEach(b => b.onclick = () => {
     const id = b.dataset.id, a = b.dataset.a;
     if (a === "et") truckModal(T(id)); if (a === "eb") branchModal(B(id));
+    if (a === "lt") assignModal(T(id));
     if (a === "dt") {
       if (branches.some(x => x.truckId === id)) return toast("فيه فروع على العربية دي. انقلها أو امسحها الأول.", "err");
       delTruck(id);
@@ -113,6 +195,28 @@ function truckModal(t) {
     }
   });
 }
+// تعيين الليدرز على العربية كلها: بيتطبق على كل فروعها مرة واحدة (والفروع الجديدة اللي بتتضاف للعربية بتاخدهم)
+function assignModal(t) {
+  const leaders = users.filter(u => u.sched === "leader");
+  const sel = new Set(t.leaders || []);
+  const n = branches.filter(b => b.truckId === t.id).length;
+  modal("تعيين ليدرز: " + t.name, `
+    <p class="mini">هيتعيّنوا على <b>${n}</b> فرع في العربية دي (بيستبدلوا الليدرز القدام). ★ = الأساسي، وهو اللي بياخد ميعاد الإرسال لو اتنين بعتوا نفس الفرع.</p>
+    <div class="field"><div class="checks">${leaders.map(u => `<label><input type="checkbox" name="ld" value="${u.uid}" ${sel.has(u.uid) ? "checked" : ""}> ${esc(u.name)}
+      <input type="radio" name="primary" value="${u.uid}" ${t.primary === u.uid ? "checked" : ""} title="الأساسي"> ★</label>`).join("")
+      || "<small>مفيش مستخدمين بدور ليدر. حدد الدور من تاب المستخدمين.</small>"}</div></div>`, {
+    async onSubmit(f) {
+      const ld = [...f.querySelectorAll("[name=ld]:checked")].map(x => x.value);
+      let primary = (f.querySelector("[name=primary]:checked") || {}).value || "";
+      if (primary && !ld.includes(primary)) primary = "";
+      if (!primary && ld.length) primary = ld[0];
+      const batch = writeBatch(db);
+      batch.update(doc(db, "trucks", t.id), { leaders: ld, primary });
+      branches.filter(b => b.truckId === t.id).forEach(b => batch.update(doc(db, "branches", b.id), { leaders: ld, primary }));
+      await batch.commit(); await loadAll(); paint(); toast("اتعيّنوا على العربية كلها ✓");
+    }
+  });
+}
 function branchModal(b) {
   const leaders = users.filter(u => u.sched === "leader");
   const sel = new Set(b ? b.leaders || [] : []);
@@ -137,6 +241,7 @@ function branchModal(b) {
         time: f.elements.time.value, order: +f.elements.order.value || 0, leaders: ld, primary
       };
       if (!data.name || !data.sheetName || !data.truckId || !data.time) throw new Error("كمّل كل الخانات المطلوبة.");
+      if (!b && !ld.length && (T(data.truckId) || {}).leaders) { data.leaders = T(data.truckId).leaders; data.primary = T(data.truckId).primary || ""; }
       if (b) await updateDoc(doc(db, "branches", b.id), data); else await addDoc(collection(db, "branches"), data);
       await loadAll(); paint(); toast("اتحفظ ✓");
     }
@@ -164,7 +269,8 @@ function importModal() {
       rows.forEach(r => {
         if (known.has(r.sheet.toLowerCase())) return;
         const tid = tmap[r.truck.toLowerCase()]; order[tid] = (order[tid] || 0) + 1;
-        batch.set(doc(collection(db, "branches")), { name: r.sheet.replace(/^breadfast coffee\s*-\s*/i, ""), sheetName: r.sheet, truckId: tid, time: r.time, order: order[tid], leaders: [], primary: "" });
+        const tt = T(tid) || {};
+        batch.set(doc(collection(db, "branches")), { name: r.sheet.replace(/^breadfast coffee\s*-\s*/i, ""), sheetName: r.sheet, truckId: tid, time: r.time, order: order[tid], leaders: tt.leaders || [], primary: tt.primary || "" });
         n++;
       });
       await batch.commit(); await loadAll(); paint(); toast(`اتضاف ${n} فرع ✓`);
@@ -193,7 +299,8 @@ function paintReview() {
     <div class="datebar"><label class="dl">اليوم:</label><input type="date" id="dayIn" value="${day}">
       <span class="dl">${dayLabel(day)}</span><span class="mini">(تاب الشيت: ${tabName(day)})</span>
       ${allArch ? '<span class="badge ok">اتبعت للشيت وأتأرشف</span>' : ""}
-      <div style="flex:1"></div>
+      <div class="grow-sp"></div>
+      <button class="btn ghost" id="btnXlsx" ${entries.length || docks.length ? "" : "disabled"}><i class="fa-solid fa-file-excel"></i> تصدير إكسيل لليوم</button>
       <button class="btn" id="btnSheet" ${entries.length || docks.length ? "" : "disabled"}><i class="fa-solid fa-table"></i> إرسال للشيت</button></div>
     <div id="revMsg" class="msg hidden"></div>
     ${trucks.map(t => {
@@ -221,6 +328,7 @@ function paintReview() {
 
   $("dayIn").onchange = async e => { day = e.target.value || cairoToday(); await loadDay(); paintReview(); };
   $("btnSheet").onclick = sendToSheet;
+  $("btnXlsx").onclick = guarded(exportDayXlsx);
   $("tabBody").querySelectorAll("[data-a]").forEach(b => b.onclick = () => {
     const a = b.dataset.a, id = b.dataset.id;
     if (a === "ee") entryModal(entries.find(x => x.id === id));
