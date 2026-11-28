@@ -1,9 +1,22 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, collection, getDocs, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { sessionGate, releaseSession } from "./session.js";
 
 export const EMAIL_DOMAIN = "fps-portal.app";
+
+// سجل النشاط (الأدمن بس هو اللي بيقراه). بنسجّل بدون ما نستنى، وأي فشل مش بيعطّل حاجة.
+let ME = null;
+export function logActivity(type, detail = "", who = ME) {
+  try {
+    if (!who) return Promise.resolve();
+    return addDoc(collection(db, "activity"), {
+      uid: who.uid, name: String(who.name || "").slice(0, 80), type: String(type).slice(0, 30),
+      detail: String(detail).slice(0, 300), page: (location.pathname.split("/").pop() || "index.html").slice(0, 40), at: serverTimestamp()
+    }).catch(() => {});
+  } catch (_) { return Promise.resolve(); }
+}
+export function setActivityUser(u) { ME = u; }
 
 export const normId = s => String(s || "").trim().toLowerCase();
 export const validId = s => /^[a-z0-9._-]{2,32}$/.test(s);
@@ -65,7 +78,7 @@ export function initThemeButton(btn) {
 // بنجبر المتصفح يجيب نسخة جديدة من كل الملفات وبعدين يعمل ريفريش مرة واحدة.
 const CORE_ASSETS = [
   "index.html", "dashboard.html", "tool.html", "setup.html", "schedule.html", "schedule-admin.html", "css/style.css",
-  "js/common.js", "js/session.js", "js/prices-core.js", "js/prices-admin.js", "js/firebase.js", "js/firebase-config.js", "js/login.js", "js/dashboard.js", "js/tool.js", "js/setup.js", "js/schedule-core.js", "js/schedule.js", "js/schedule-admin.js"
+  "js/common.js", "js/session.js", "js/profile.js", "assets/logo.png", "js/prices-core.js", "js/prices-admin.js", "js/firebase.js", "js/firebase-config.js", "js/login.js", "js/dashboard.js", "js/tool.js", "js/setup.js", "js/schedule-core.js", "js/schedule.js", "js/schedule-admin.js"
 ];
 async function refreshAssets() {
   const list = new Set(CORE_ASSETS);
@@ -126,6 +139,8 @@ export function guard({ admin = false } = {}) {
         if (site.maintenance === true && profile.role !== "admin") return showMaintenance(site.message);
         if (!done) {
           done = true; first = { role: profile.role };
+          ME = { uid: user.uid, name: profile.name };
+          logActivity("page", document.title.replace(/\s*\|.*$/, ""));
           if (profile.role === "admin") return resolve(api);        // الأدمن مستثنى من قفل الجهاز الواحد
           // المستخدم العادي: جلسة واحدة نشطة بس
           sessionGate(user.uid, why => signOut(auth).finally(() => location.replace("index.html?reason=session-" + why)), profile.deviceLock !== false).then(r => {
@@ -160,6 +175,7 @@ export function guard({ admin = false } = {}) {
 }
 
 export async function logout() {
+  try { await Promise.race([logActivity("logout"), new Promise(r => setTimeout(r, 1500))]); } catch (_) {}
   try { if (auth.currentUser) await releaseSession(auth.currentUser.uid); } catch (_) {}
   try { await signOut(auth); } catch (_) {}
   location.replace("index.html");
