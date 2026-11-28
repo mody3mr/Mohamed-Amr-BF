@@ -13,6 +13,7 @@ const api = await guard();
 const me = api.profile, uid = api.user.uid;
 const root = $("root");
 initShell(api);
+const byOrder = (a, b) => (a.order || 0) - (b.order || 0) || String(a.name).localeCompare(String(b.name));
 
 try {
   if (me.role === "admin" && !me.sched) location.replace("schedule-admin.html");
@@ -30,7 +31,6 @@ async function loadTrucks() {
   const s = await getDocs(collection(db, "trucks"));
   return s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.loadTime).localeCompare(String(b.loadTime)));
 }
-const byOrder = (a, b) => (a.order || 0) - (b.order || 0) || String(a.name).localeCompare(String(b.name));
 function statusBadge(arr, end, sched, holiday) {
   if (holiday) return '<span class="badge hol">إجازة</span>';
   if (!arr) return '<span class="badge wait">ناقص</span>';
