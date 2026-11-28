@@ -3,6 +3,7 @@ import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword
 import { doc, getDoc, updateDoc, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { normId, validId, arErr, esc, initThemeButton } from "./common.js";
 import { claimSession } from "./session.js";
+import { logActivity } from "./common.js";
 
 // رقم واتساب مدير النظام (للتواصل لما حد ينسى كلمة المرور)
 const ADMIN_WHATSAPP = "201094264296";
@@ -147,6 +148,7 @@ $("form").addEventListener("submit", async e => {
         }
       }
     } catch (_) { /* لوحة التحكم هتتحقق تاني */ }
+    try { const pp = await getDoc(doc(db, "users", cred.user.uid)); await Promise.race([logActivity("login", "سجّل دخول", { uid: cred.user.uid, name: pp.exists() ? pp.data().name : "" }), new Promise(r => setTimeout(r, 1500))]); } catch (_) {}
     location.replace("dashboard.html");
   } catch (err) {
     const wrong = err && (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password");
