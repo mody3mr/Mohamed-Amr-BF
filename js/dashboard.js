@@ -61,13 +61,17 @@ function modal(title, bodyHtml, { onSubmit, submitText = "حفظ", danger = fals
   return { form, close };
 }
 
-function accessHtml(allTools, ids) {
+function accessHtml(allTools, ids, sched = "") {
   const list = tools.length
     ? tools.map(t => `<label><input type="checkbox" name="tid" value="${esc(t.id)}" ${ids.includes(t.id) ? "checked" : ""}> ${esc(t.name)}</label>`).join("")
     : '<span class="sub" style="margin:0">مفيش أدوات لسه</span>';
   return `<div class="field"><label>الأدوات المسموحة</label>
     <label style="font-weight:500;display:flex;gap:8px;align-items:center"><input type="checkbox" name="allTools" ${allTools ? "checked" : ""} style="width:auto"> كل الأدوات (الحالية والجديدة)</label>
-    <div class="checks" data-checks>${list}</div></div>`;
+    <div class="checks" data-checks>${list}</div></div>
+  <div class="field"><label>دور نظام المواعيد</label><select name="sched">
+    <option value="" ${!sched ? "selected" : ""}>مفيش</option>
+    <option value="leader" ${sched === "leader" ? "selected" : ""}>ليدر / مندوب (بيدخل مواعيد فروعه)</option>
+    <option value="dock" ${sched === "dock" ? "selected" : ""}>مندوب المخزن (مواعيد تحميل العربيات)</option></select></div>`;
 }
 function wireAccess(form) {
   const all = form.elements.allTools;
@@ -89,9 +93,18 @@ function randomKey() {
 }
 
 /* ------------------------------------------------------------------ tools (لحظي) */
+function schedCards() {
+  const c = [];
+  if (isAdmin) c.push(["schedule-admin.html", "fa-solid fa-calendar-check", "إدارة مواعيد الفروع", "العربيات والفروع ومراجعة اللي اتبعت وإرساله للشيت"]);
+  if (me && (me.sched === "leader" || me.sched === "dock" || isAdmin))
+    c.push(["schedule.html", "fa-solid fa-clock", me.sched === "dock" ? "مواعيد تحميل العربيات" : "إدخال مواعيد الفروع", me.sched === "dock" ? "سجّل دخول وخروج العربيات من المخزن" : "سجّل مواعيد وصول وانتهاء فروعك"]);
+  return c.map(([href, ic, t, p]) => `<a class="tool" href="${href}"><div class="ico"><i class="${ic}"></i></div><h3>${t}</h3><p>${p}</p></a>`).join("");
+}
 function renderTools() {
   const grid = $("toolsGrid");
   const mine = tools.filter(t => canSee(me, t.id));
+  const extra = schedCards();
+  if (!mine.length && extra) { grid.innerHTML = extra; return; }
   if (!mine.length) {
     grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
       ${isAdmin && !tools.length
@@ -102,7 +115,7 @@ function renderTools() {
   }
   grid.innerHTML = mine.map(t => `<a class="tool" href="tool.html?id=${encodeURIComponent(t.id)}">
       <div class="ico"><i class="${ICON_RE.test(t.icon || "") ? esc(t.icon) : "fa-solid fa-screwdriver-wrench"}"></i></div>
-      <h3>${esc(t.name)}</h3><p>${esc(t.description || "")}</p></a>`).join("");
+      <h3>${esc(t.name)}</h3><p>${esc(t.description || "")}</p></a>`).join("") + extra;
 }
 
 async function seedDefault() {
@@ -276,6 +289,7 @@ function cleanUserData(u) {
   if (u.createdAt) d.createdAt = u.createdAt;
   if (u.createdBy) d.createdBy = u.createdBy;
   if (u.deviceLock === false) d.deviceLock = false;
+  if (u.sched) d.sched = u.sched;
   return d;
 }
 
@@ -303,7 +317,8 @@ $("btnAddUser").onclick = () => modal("مستخدم جديد", `
     const batch = writeBatch(db);
     batch.set(doc(db, "users", uid), {
       uid, employeeId: id, name, role: form.elements.role.value, active: true, pending,
-      allTools: acc.allTools, toolIds: acc.toolIds, authEmail: email, createdAt: serverTimestamp(), createdBy: me.uid
+      allTools: acc.allTools, toolIds: acc.toolIds, authEmail: email, createdAt: serverTimestamp(), createdBy: me.uid,
+      ...(form.elements.sched.value ? { sched: form.elements.sched.value } : {})
     });
     batch.set(doc(db, "loginMap", id), {
       email, uid, first: firstName(name), active: true, needsPassword: pending, ...(pending ? { initKey: secret } : {})
@@ -346,14 +361,14 @@ $("usersBody").addEventListener("click", e => {
       </div>
       <div class="field"><label style="display:flex;gap:8px;align-items:center;font-weight:700"><input type="checkbox" name="active" style="width:auto" ${u.active ? "checked" : ""} ${you ? "disabled" : ""}> الحساب مفعّل (شيل العلامة = حظر)</label>
         ${you ? '<small>مينفعش توقف أو تغيّر دور حسابك انت.</small>' : ""}</div>
-      ${accessHtml(!!u.allTools, u.toolIds || [])}`, {
+      ${accessHtml(!!u.allTools, u.toolIds || [], u.sched || "")}`, {
       onMount: wireAccess,
       async onSubmit(form) {
         const name = form.elements.name.value.trim();
         const newId = normId(form.elements.empId.value);
         if (!validId(newId)) throw { message: "الرقم الوظيفي لازم حروف إنجليزي/أرقام (2 إلى 32)." };
         const acc = readAccess(form);
-        const patch = { name, allTools: acc.allTools, toolIds: acc.toolIds };
+        const patch = { name, allTools: acc.allTools, toolIds: acc.toolIds, sched: form.elements.sched.value };
         if (!you) { patch.role = form.elements.role.value; patch.active = form.elements.active.checked; }
         const batch = writeBatch(db);
         const mapPatch = { first: firstName(name), active: you ? true : form.elements.active.checked };
